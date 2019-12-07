@@ -1,6 +1,5 @@
 package de.hhu.bsinfo.neutrino.connection;
 
-import de.hhu.bsinfo.neutrino.buffer.LocalBuffer;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
@@ -9,63 +8,22 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.util.Deque;
-import java.util.LinkedList;
 
-public class ReliableConnection implements Connection{
+public final class ReliableConnection extends Connection{
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
 
-    private final int completionQueueSize = 100;
-    private final int sendQueueSize = 100;
-    private final int receiveQueueSize = 100;
-
-    private final Context context;
-    private final Deque<RegisteredBuffer> localBuffers;
-    private final ProtectionDomain protectionDomain;
     private final QueuePair queuePair;
-    private final CompletionQueue sendCompletionQueue;
-    private final CompletionQueue receiveCompletionQueue;
-    private final CompletionChannel completionChannel;
 
-    public ReliableConnection() throws IOException {
-        var deviceCnt = Context.getDeviceCount();
-        if(0 < deviceCnt) {
-            context = Context.openDevice(0);
-            if(context == null) {
-                throw  new IOException("Cannot open Context");
-            }
-        } else {
-            throw new IOException("No InfiniBand devices available");
-        }
+    public ReliableConnection(int deviceNumber) throws IOException {
 
-        protectionDomain = context.allocateProtectionDomain();
-        if(protectionDomain == null) {
-            throw  new IOException("Unable to allocate protection domain");
-        }
+        super(deviceNumber);
 
-        completionChannel = context.createCompletionChannel();
-        if(completionChannel == null) {
-            throw  new IOException("Cannot create completion channel");
-        }
-
-        sendCompletionQueue = context.createCompletionQueue(completionQueueSize);
-        if(sendCompletionQueue == null) {
-            throw new IOException("Cannot create completion queue");
-        }
-
-        receiveCompletionQueue = context.createCompletionQueue(completionQueueSize);
-        if(receiveCompletionQueue == null) {
-            throw new IOException("Cannot create completion queue");
-        }
-
-        queuePair = protectionDomain.createQueuePair(new QueuePair.InitialAttributes.Builder(
-                QueuePair.Type.RC, sendCompletionQueue, receiveCompletionQueue, sendQueueSize, receiveQueueSize, 1, 1).build());
+        queuePair = getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
+                QueuePair.Type.RC, getSendCompletionQueue(), getReceiveCompletionQueue(), getSendQueueSize(), getReceiveQueueSize(), 1, 1).build());
         if(queuePair == null) {
             throw new IOException("Cannot create queue pair");
         }
-
-        localBuffers = new LinkedList<>();
     }
 
     @Override
@@ -77,7 +35,35 @@ public class ReliableConnection implements Connection{
 
     @Override
     public void connect(Socket socket) throws IOException {
+        var localInfo = new ConnectionInformation((byte) 1, getPortAttributes().getLocalId(), queuePair.getQueuePairNumber());
 
+        LOGGER.info("Local connection information: {}", localInfo);
+
+        socket.getOutputStream().write(ByteBuffer.allocate(Byte.BYTES + Short.BYTES + Integer.BYTES)
+                .put(localInfo.getPortNumber())
+                .putShort(localInfo.getLocalId())
+                .putInt(localInfo.getQueuePairNumber())
+                .array());
+
+        LOGGER.info("Waiting for remote connection information");
+
+        var byteBuffer = ByteBuffer.wrap(socket.getInputStream().readNBytes(Byte.BYTES + Short.BYTES + Integer.BYTES));
+        var remoteInfo = new ConnectionInformation(byteBuffer);
+
+        LOGGER.info("Received connection information: {}", remoteInfo);
+
+        if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToReceiveAttributesRC(
+                remoteInfo.getQueuePairNumber(), remoteInfo.getLocalId(), remoteInfo.getPortNumber()))) {
+            throw new IOException("Unable to move queue pair into RTR state");
+        }
+
+        LOGGER.info("Moved queue pair into RTR state");
+
+        if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToSendAttributesRC())) {
+            throw new IOException("Unable to move queue pair into RTS state");
+        }
+
+        LOGGER.info("Moved queue pair into RTS state");
     }
 
     @Override
@@ -92,19 +78,8 @@ public class ReliableConnection implements Connection{
 
     @Override
     public void close() throws IOException {
-
-    }
-
-    public RegisteredBuffer getLocalBuffer(int size) {
-        var buffer = protectionDomain.allocateMemory(size, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE, AccessFlag.MW_BIND);
-        localBuffers.add(buffer);
-
-        return buffer;
-    }
-
-    public void freeLocalBuffer(RegisteredBuffer buffer) {
-        localBuffers.remove(buffer);
-        buffer.close();
+        queuePair.close();
+        super.close();
     }
 
 
