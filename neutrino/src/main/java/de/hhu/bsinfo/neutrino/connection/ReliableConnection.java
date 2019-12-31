@@ -15,11 +15,11 @@ public final class ReliableConnection extends Connection{
 
     private final QueuePair queuePair;
 
-    public ReliableConnection(int deviceNumber) throws IOException {
+    public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
-        super(deviceNumber);
+        super(deviceContext);
 
-        queuePair = getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
+        queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
                 QueuePair.Type.RC, getSendCompletionQueue(), getReceiveCompletionQueue(), getSendQueueSize(), getReceiveQueueSize(), 1, 1).build());
         if(queuePair == null) {
             throw new IOException("Cannot create queue pair");
