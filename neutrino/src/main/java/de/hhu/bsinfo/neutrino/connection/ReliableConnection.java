@@ -8,12 +8,16 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ReliableConnection extends Connection{
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
 
+    private static final ConnectionType connectionType = ConnectionType.ReliableConnection;
+
     private final QueuePair queuePair;
+    private final AtomicBoolean isConnected = new AtomicBoolean(false);
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
@@ -35,6 +39,12 @@ public final class ReliableConnection extends Connection{
 
     @Override
     public void connect(Socket socket) throws IOException {
+
+        if(isConnected.getAndSet(true)){
+            LOGGER.error("Connection already connected");
+            throw new IOException("Connection is already connected");
+        }
+
         var localInfo = new ConnectionInformation((byte) 1, getPortAttributes().getLocalId(), queuePair.getQueuePairNumber());
 
         LOGGER.info("Local connection information: {}", localInfo);
@@ -81,6 +91,11 @@ public final class ReliableConnection extends Connection{
         queuePair.close();
         super.close();
     }
+
+    public static ConnectionType getConnectionType() {
+        return connectionType;
+    }
+
 
 
 }

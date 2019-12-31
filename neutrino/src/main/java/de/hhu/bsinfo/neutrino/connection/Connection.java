@@ -18,6 +18,8 @@ public abstract class Connection {
 
     private final DeviceContext deviceContext;
 
+    private final int connectionId;
+
     private final CompletionQueue sendCompletionQueue;
     private final CompletionQueue receiveCompletionQueue;
     private final CompletionChannel completionChannel;
@@ -27,6 +29,7 @@ public abstract class Connection {
     Connection(DeviceContext deviceContext) throws IOException {
 
         this.deviceContext = deviceContext;
+        this.connectionId = ConnectionManager.provideConnectionId();
 
         portAttributes = deviceContext.getContext().queryPort(1);
         if(portAttributes == null) {
@@ -86,5 +89,13 @@ public abstract class Connection {
 
     public int getReceiveQueueSize() {
         return receiveQueueSize;
+    }
+
+    public DeviceContext getDeviceContext() {
+        return deviceContext;
+    }
+
+    public int getConnectionId() {
+        return connectionId;
     }
 }
