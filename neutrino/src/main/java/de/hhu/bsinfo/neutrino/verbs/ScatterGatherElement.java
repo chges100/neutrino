@@ -20,6 +20,8 @@ public class ScatterGatherElement extends Struct implements Poolable {
         super(handle);
     }
 
+    ScatterGatherElement() {};
+
     public ScatterGatherElement(final long address, final int length, final int localKey) {
         this.address.set(address);
         this.length.set(length);

@@ -10,7 +10,7 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
 @LinkNative("ibv_send_wr")
-public class SendWorkRequest extends Struct implements Linkable<SendWorkRequest> {
+public class SendWorkRequest extends Struct implements Linkable<SendWorkRequest>, Poolable {
 
     private final NativeLong id = longField("wr_id");
     private final NativeLong next = longField("next");
@@ -370,7 +370,7 @@ public class SendWorkRequest extends Struct implements Linkable<SendWorkRequest>
         }
 
         public SendWorkRequest build() {
-            var ret = new SendWorkRequest();
+            var ret = (SendWorkRequest) Verbs.getPoolableInstance(SendWorkRequest.class);
 
             ret.setId(id);
             ret.setListHandle(listHandle);

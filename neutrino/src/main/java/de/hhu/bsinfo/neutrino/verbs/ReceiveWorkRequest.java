@@ -5,11 +5,12 @@ import de.hhu.bsinfo.neutrino.data.NativeLong;
 import de.hhu.bsinfo.neutrino.struct.Struct;
 import de.hhu.bsinfo.neutrino.util.LinkNative;
 import de.hhu.bsinfo.neutrino.util.Linkable;
+import de.hhu.bsinfo.neutrino.util.Poolable;
 
 import java.util.concurrent.atomic.AtomicLong;
 
 @LinkNative("ibv_recv_wr")
-public class ReceiveWorkRequest extends Struct implements Linkable<ReceiveWorkRequest> {
+public class ReceiveWorkRequest extends Struct implements Linkable<ReceiveWorkRequest>, Poolable {
 
     private final NativeLong id = longField("wr_id");
     private final NativeLong next = longField("next");
@@ -95,7 +96,7 @@ public class ReceiveWorkRequest extends Struct implements Linkable<ReceiveWorkRe
         }
 
         public ReceiveWorkRequest build() {
-            var ret = new ReceiveWorkRequest();
+            var ret = (ReceiveWorkRequest) Verbs.getPoolableInstance(ReceiveWorkRequest.class);
 
             ret.setId(id);
             ret.setListHandle(listHandle);

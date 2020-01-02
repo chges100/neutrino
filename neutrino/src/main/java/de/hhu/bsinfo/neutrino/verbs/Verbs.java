@@ -20,6 +20,9 @@ public final class Verbs {
         poolMap.put(Result.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, Result::new)));
         poolMap.put(AsyncEvent.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, AsyncEvent::new)));
         poolMap.put(WorkCompletion.TagMatchingInfo.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, WorkCompletion.TagMatchingInfo::new)));
+        poolMap.put(SendWorkRequest.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, SendWorkRequest::new)));
+        poolMap.put(ReceiveWorkRequest.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, ReceiveWorkRequest::new)));
+        poolMap.put(ScatterGatherElement.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, ScatterGatherElement::new)));
     }
 
     private Verbs() {
