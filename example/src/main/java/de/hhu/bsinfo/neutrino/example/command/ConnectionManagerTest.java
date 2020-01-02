@@ -3,6 +3,7 @@ package de.hhu.bsinfo.neutrino.example.command;
 import de.hhu.bsinfo.neutrino.connection.Connection;
 import de.hhu.bsinfo.neutrino.connection.ConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.ConnectionType;
+import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
 import de.hhu.bsinfo.neutrino.example.util.ConnectionContext;
 import de.hhu.bsinfo.neutrino.verbs.CompletionQueue;
 import de.hhu.bsinfo.neutrino.verbs.ReceiveWorkRequest;
@@ -17,6 +18,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 
 @CommandLine.Command(
         name = "con-mgr-test",
@@ -24,9 +26,11 @@ import java.util.concurrent.Callable;
         showDefaultValues = true,
         separator = " ")
 public class ConnectionManagerTest implements Callable<Void> {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
+    private static final int DEFAULTBUFSIZE = 64;
 
     private ConnectionManager connectionManager;
 
@@ -72,11 +76,21 @@ public class ConnectionManagerTest implements Callable<Void> {
         var serverSocket = new ServerSocket(port);
         var socket = serverSocket.accept();
 
-        var connection = connectionManager.createConnection(deviceId, ConnectionType.ReliableConnection, socket);
+        var connection = connectionManager.createReliableConnection(deviceId,  socket);
 
         socket.close();
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
+
+        var buffer = connectionManager.allocLocalBuffer(connection.getDeviceContext(), DEFAULTBUFSIZE);
+        LOGGER.info("Send magic number");
+        buffer.putInt(0, 102401024);
+
+        int magic = buffer.getInt(0);
+        LOGGER.info("Magic number is {}", magic);
+
+        connection.send(buffer);
+        connection.pollSend(1);
 
         connectionManager.closeConnection(connection);
 
@@ -86,14 +100,32 @@ public class ConnectionManagerTest implements Callable<Void> {
     public void startClient() throws IOException {
         var socket = new Socket(serverAddress.getAddress(), serverAddress.getPort());
 
-        var connection = connectionManager.createConnection(deviceId, ConnectionType.ReliableConnection, socket);
+        var connection = connectionManager.createReliableConnection(deviceId, socket);
 
         socket.close();
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
+        var buffer = connectionManager.allocLocalBuffer(connection.getDeviceContext(), DEFAULTBUFSIZE);
+        // Clear buffer
+        buffer.putInt(0, 0);
+
+        long wrId = connection.receive(buffer);
+
+        int received = 0;
+        do{
+            var workCompletions = connection.pollReceive(1);
+            received = workCompletions.getLength();
+        } while(1 > received);
+
+        int receive = buffer.getInt(0);
+
+        LOGGER.info("Received magic number {}", receive);
+
         connectionManager.closeConnection(connection);
 
         LOGGER.info("Connection closed");
+
+
     }
 }

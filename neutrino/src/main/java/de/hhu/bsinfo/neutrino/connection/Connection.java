@@ -56,10 +56,6 @@ public abstract class Connection {
 
     abstract void connect(Socket socket) throws IOException;
 
-    abstract void send(RegisteredBuffer data) throws IOException;
-
-    abstract void receive() throws IOException;
-
     void close() throws IOException {
     }
 

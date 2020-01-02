@@ -62,24 +62,15 @@ public class ConnectionManager {
         buffer.close();
     }
 
-    public Connection createConnection(int deviceId, ConnectionType connectionType, Socket socket) throws IOException {
+    public ReliableConnection createReliableConnection(int deviceId, Socket socket) throws IOException {
+        var connection = new ReliableConnection(deviceContexts.get(deviceId));
+        connections.add(connection);
 
-        Connection connection;
+        LOGGER.info("Create new reliable connection {}", connection.getConnectionId());
 
-        if(ConnectionType.ReliableConnection == connectionType) {
-            connection = new ReliableConnection(deviceContexts.get(deviceId));
-            connections.add(connection);
+        connection.init();
 
-            LOGGER.info("Create new reliable connection {}", connection.getConnectionId());
-
-            connection.init();
-
-            connection.connect(socket);
-
-        } else {
-            LOGGER.error("Connection type invalid.");
-            throw new IOException("Please use a valid connection type");
-        }
+        connection.connect(socket);
 
         return connection;
     }

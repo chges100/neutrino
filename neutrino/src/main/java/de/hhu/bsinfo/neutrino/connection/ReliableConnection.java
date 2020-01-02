@@ -19,6 +19,7 @@ public final class ReliableConnection extends Connection{
     private final QueuePair queuePair;
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
 
+
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
         super(deviceContext);
@@ -76,14 +77,44 @@ public final class ReliableConnection extends Connection{
         LOGGER.info("Moved queue pair into RTS state");
     }
 
-    @Override
-    public void send(RegisteredBuffer data) throws IOException {
-
+    public long send(RegisteredBuffer data) {
+        return send(data, 0, (int) data.capacity());
     }
 
-    @Override
-    public void receive() throws IOException {
+    public long send(RegisteredBuffer data, int offset, int length) {
+        var scatterGatherElement = new ScatterGatherElement(data.getHandle() + offset, length, data.getLocalKey());
+        var sendWorkRequest = new SendWorkRequest.Builder(SendWorkRequest.OpCode.SEND, scatterGatherElement).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).build();
 
+        queuePair.postSend(sendWorkRequest);
+
+        return sendWorkRequest.getId();
+    }
+
+    public long receive(RegisteredBuffer data) {
+        return receive(data, 0, (int) data.capacity());
+    }
+
+    public long receive(RegisteredBuffer data, int offset, int length) {
+        var scatterGatherElement = new ScatterGatherElement(data.getHandle() + offset, length, data.getLocalKey());
+        var receiveWorkRequest = new ReceiveWorkRequest.Builder(scatterGatherElement).build();
+
+        queuePair.postReceive(receiveWorkRequest);
+
+        return receiveWorkRequest.getId();
+    }
+
+    public CompletionQueue.WorkCompletionArray pollSend(int count) {
+        var completionArray = new CompletionQueue.WorkCompletionArray(count);
+        getSendCompletionQueue().poll(completionArray);
+
+        return completionArray;
+    }
+
+    public CompletionQueue.WorkCompletionArray pollReceive(int count) {
+        var completionArray = new CompletionQueue.WorkCompletionArray(count);
+        getReceiveCompletionQueue().poll(completionArray);
+
+        return completionArray;
     }
 
     @Override
