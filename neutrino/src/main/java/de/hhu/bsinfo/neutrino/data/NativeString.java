@@ -1,7 +1,7 @@
 package de.hhu.bsinfo.neutrino.data;
 
 import de.hhu.bsinfo.neutrino.buffer.LocalBuffer;
-import java.nio.ByteBuffer;
+
 import java.nio.charset.StandardCharsets;
 
 public class NativeString extends NativeDataType {
@@ -41,7 +41,7 @@ public class NativeString extends NativeDataType {
 
     private int length() {
         for(int i = 0; i < size(); i++) {
-            if (getByteBuffer().get(i) == ZERO) {
+            if (getByteBuffer().get(getOffset() + i) == ZERO) {
                 return i;
             }
         }
