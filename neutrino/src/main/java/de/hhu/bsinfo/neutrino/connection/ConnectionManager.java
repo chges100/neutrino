@@ -18,33 +18,32 @@ public class ConnectionManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionManager.class);
 
-    private final ArrayList<DeviceContext> deviceContexts;
-    private final Deque<RegisteredBuffer> localBuffers;
-    private final ArrayList<Connection> connections;
+    private static final ArrayList<DeviceContext> deviceContexts;
+    private static final Deque<RegisteredBuffer> localBuffers;
+    private static final ArrayList<Connection> connections;
 
     private static final AtomicInteger idCounter = new AtomicInteger();
 
-    public ConnectionManager() throws IOException {
-
+    static {
         var deviceCnt = Context.getDeviceCount();
         deviceContexts = new ArrayList<>();
         localBuffers = new LinkedList<>();
         connections = new ArrayList<>();
 
-        for(int i = 0; i < deviceCnt; i++) {
-            var deviceContext = new DeviceContext(i);
-            deviceContexts.add(deviceContext);
-        }
 
-        if(deviceContexts.isEmpty()) {
-            throw new IOException("No InfiniBand devices could be opened");
+        try {
+            for (int i = 0; i < deviceCnt; i++) {
+                var deviceContext = new DeviceContext(i);
+                deviceContexts.add(deviceContext);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Could not initialize InfiniBand devices");
         }
-
 
     }
 
-    public RegisteredBuffer allocLocalBuffer(DeviceContext deviceContext, int size) {
-        LOGGER.info("Allocate new memory region for device {}", deviceContext.getDeviceId());
+    public static RegisteredBuffer allocLocalBuffer(DeviceContext deviceContext, int size) {
+        LOGGER.info("Allocate new memory region for device {} of size {}", deviceContext.getDeviceId(), size);
 
         var buffer = deviceContext.getProtectionDomain().allocateMemory(size, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE, AccessFlag.MW_BIND);
         localBuffers.add(buffer);
@@ -52,17 +51,17 @@ public class ConnectionManager {
         return buffer;
     }
 
-    public RegisteredBuffer allocLocalBuffer(int deviceId, int size) {
+    public static RegisteredBuffer allocLocalBuffer(int deviceId, int size) {
         return allocLocalBuffer(deviceContexts.get(deviceId), size);
     }
 
-    public void freeLocalBuffer(RegisteredBuffer buffer) {
+    public static void freeLocalBuffer(RegisteredBuffer buffer) {
         LOGGER.info("Free memory region");
         localBuffers.remove(buffer);
         buffer.close();
     }
 
-    public ReliableConnection createReliableConnection(int deviceId, Socket socket) throws IOException {
+    public static ReliableConnection createReliableConnection(int deviceId, Socket socket) throws IOException {
         var connection = new ReliableConnection(deviceContexts.get(deviceId));
         connections.add(connection);
 
@@ -75,7 +74,7 @@ public class ConnectionManager {
         return connection;
     }
 
-    public void closeConnection(Connection connection) throws IOException {
+    public static void closeConnection(Connection connection) throws IOException {
         LOGGER.info("Close connection {}", connection.getConnectionId());
         connection.close();
         connections.remove(connection);

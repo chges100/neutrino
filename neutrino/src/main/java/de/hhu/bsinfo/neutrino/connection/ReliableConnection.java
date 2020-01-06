@@ -1,6 +1,7 @@
 package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
+import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,7 +11,7 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public final class ReliableConnection extends Connection{
+public class ReliableConnection extends Connection{
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
 
@@ -92,6 +93,10 @@ public final class ReliableConnection extends Connection{
         queuePair.postSend(sendWorkRequest);
 
         return sendWorkRequest.getId();
+    }
+
+    public long sendMessage(Message message) {
+        return send(message.getByteBuffer());
     }
 
     public long receive(RegisteredBuffer data) {
