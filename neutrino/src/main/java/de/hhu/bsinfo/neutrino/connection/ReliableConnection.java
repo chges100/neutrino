@@ -111,18 +111,48 @@ public final class ReliableConnection extends Connection{
         return receiveWorkRequest.getId();
     }
 
-    public CompletionQueue.WorkCompletionArray pollSend(int count) {
+    private CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {
         var completionArray = new CompletionQueue.WorkCompletionArray(count);
-        getSendCompletionQueue().poll(completionArray);
+        getReceiveCompletionQueue().poll(completionArray);
+
 
         return completionArray;
     }
 
-    public CompletionQueue.WorkCompletionArray pollReceive(int count) {
+    public int pollReceive(int count) throws IOException {
+        var completionArray = pollReceiveCompletions(count);
+
+        for(int i = 0; i < completionArray.getLength(); i++) {
+            var completion = completionArray.get(i);
+            if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
+                LOGGER.error("Work completion failes with error [{}]: {}", completion.getStatus(), completion.getStatusMessage());
+                throw new IOException("WorkCompletion Failed");
+            }
+        }
+
+        return completionArray.getLength();
+    }
+
+    private CompletionQueue.WorkCompletionArray pollSendCompletions(int count) {
         var completionArray = new CompletionQueue.WorkCompletionArray(count);
-        getReceiveCompletionQueue().poll(completionArray);
+        getSendCompletionQueue().poll(completionArray);
+
 
         return completionArray;
+    }
+
+    public int pollSend(int count) throws IOException {
+        var completionArray = pollSendCompletions(count);
+
+        for(int i = 0; i < completionArray.getLength(); i++) {
+            var completion = completionArray.get(i);
+            if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
+                LOGGER.error("Work completion failes with error [{}]: {}", completion.getStatus(), completion.getStatusMessage());
+                throw new IOException("WorkCompletion Failed");
+            }
+        }
+
+        return completionArray.getLength();
     }
 
     @Override

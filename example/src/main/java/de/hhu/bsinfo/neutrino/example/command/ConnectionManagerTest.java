@@ -1,14 +1,8 @@
 package de.hhu.bsinfo.neutrino.example.command;
 
-import de.hhu.bsinfo.neutrino.connection.Connection;
+
 import de.hhu.bsinfo.neutrino.connection.ConnectionManager;
-import de.hhu.bsinfo.neutrino.connection.ConnectionType;
-import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
-import de.hhu.bsinfo.neutrino.example.util.ConnectionContext;
-import de.hhu.bsinfo.neutrino.verbs.CompletionQueue;
-import de.hhu.bsinfo.neutrino.verbs.ReceiveWorkRequest;
-import de.hhu.bsinfo.neutrino.verbs.ScatterGatherElement;
-import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -114,9 +108,8 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         int received = 0;
         do{
-            var workCompletions = connection.pollReceive(1);
-            received = workCompletions.getLength();
-        } while(1 > received);
+            received = connection.pollReceive(1);
+        } while(0 == received);
 
         int receive = buffer.getInt(0);
 
