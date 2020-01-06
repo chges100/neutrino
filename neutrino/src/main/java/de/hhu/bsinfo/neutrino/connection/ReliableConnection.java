@@ -88,7 +88,7 @@ public class ReliableConnection extends Connection{
         scatterGatherElement.setLength(length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var sendWorkRequest = new SendWorkRequest.Builder(SendWorkRequest.OpCode.SEND, scatterGatherElement).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).build();
+        var sendWorkRequest = new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, scatterGatherElement).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).build();
 
         queuePair.postSend(sendWorkRequest);
 
@@ -109,7 +109,7 @@ public class ReliableConnection extends Connection{
         scatterGatherElement.setLength(length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var receiveWorkRequest = new ReceiveWorkRequest.Builder(scatterGatherElement).build();
+        var receiveWorkRequest = new ReceiveWorkRequest.Builder().withScatterGatherElement(scatterGatherElement).build();
 
         queuePair.postReceive(receiveWorkRequest);
 
