@@ -166,6 +166,10 @@ public class ReliableConnection extends Connection{
         super.close();
     }
 
+    public QueuePair getQueuePair() {
+        return queuePair;
+    }
+
     public static ConnectionType getConnectionType() {
         return connectionType;
     }

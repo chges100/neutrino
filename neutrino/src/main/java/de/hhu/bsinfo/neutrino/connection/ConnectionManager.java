@@ -62,14 +62,55 @@ public class ConnectionManager {
     }
 
     public static ReliableConnection createReliableConnection(int deviceId, Socket socket) throws IOException {
-        var connection = new ReliableConnection(deviceContexts.get(deviceId));
+        return createReliableConnection(deviceContexts.get(deviceId), socket);
+
+    }
+
+    public static ReliableConnection createUnconnectedReliableConnection(int deviceId) throws IOException {
+        return createUnconnectedReliableConnection(deviceContexts.get(deviceId));
+    }
+
+    public static ReliableConnection createReliableConnection(DeviceContext deviceContext, Socket socket) throws IOException {
+        var connection = createUnconnectedReliableConnection(deviceContext);
+        connection.connect(socket);
+
+        return connection;
+    }
+
+    public static ReliableConnection createUnconnectedReliableConnection(DeviceContext deviceContext) throws IOException {
+        var connection = new ReliableConnection(deviceContext);
         connections.add(connection);
 
         LOGGER.info("Create new reliable connection {}", connection.getConnectionId());
 
         connection.init();
 
+        return connection;
+    }
+
+    public static RDMAConnection createRDMAConnection(int deviceId, Socket socket) throws IOException {
+        return createRDMAConnection(deviceContexts.get(deviceId), socket);
+
+    }
+
+    public static RDMAConnection createUnconnectedRDMAConnection(int deviceId) throws IOException {
+        return createUnconnectedRDMAConnection(deviceContexts.get(deviceId));
+    }
+
+    public static RDMAConnection createRDMAConnection(DeviceContext deviceContext, Socket socket) throws IOException {
+        var connection = createUnconnectedRDMAConnection(deviceContext);
         connection.connect(socket);
+
+        return connection;
+    }
+
+    public static RDMAConnection createUnconnectedRDMAConnection(DeviceContext deviceContext) throws IOException {
+        var connection = new RDMAConnection(deviceContext);
+        connections.add(connection);
+
+        LOGGER.info("Create new reliable connection {}", connection.getConnectionId());
+
+        connection.init();
 
         return connection;
     }

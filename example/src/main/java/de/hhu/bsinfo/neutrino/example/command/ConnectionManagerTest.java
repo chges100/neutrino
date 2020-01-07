@@ -98,7 +98,7 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
-        var buffer = ConnectionManager.allocLocalBuffer(connection.getDeviceContext(), Message.getMessageSizeForPayload(4));
+        var buffer = ConnectionManager.allocLocalBuffer(connection.getDeviceContext(), Message.getMessageSizeForPayload(8));
 
         long wrId = connection.receive(buffer);
 

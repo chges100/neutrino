@@ -87,7 +87,7 @@ public abstract class Connection {
         return receiveQueueSize;
     }
 
-    public DeviceContext getDeviceContext() {
+    public final DeviceContext getDeviceContext() {
         return deviceContext;
     }
 
