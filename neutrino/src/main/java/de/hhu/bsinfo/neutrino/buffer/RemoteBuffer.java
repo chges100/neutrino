@@ -19,6 +19,13 @@ public class RemoteBuffer {
         this.key = key;
     }
 
+    public RemoteBuffer(QueuePair queuePair, BufferInformation bufferInformation) {
+        this.queuePair = queuePair;
+        this.address = bufferInformation.getAddress();
+        this.capacity = bufferInformation.getCapacity();
+        this.key = bufferInformation.getRemoteKey();
+    }
+
     public long read(RegisteredBuffer localBuffer) {
         return execute(OpCode.RDMA_READ, localBuffer);
     }

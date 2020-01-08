@@ -1,10 +1,12 @@
 package de.hhu.bsinfo.neutrino.example.command;
 
 
+import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.connection.ConnectionManager;
 
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
+import de.hhu.bsinfo.neutrino.example.util.RdmaContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -48,6 +50,8 @@ public class ConnectionManagerTest implements Callable<Void> {
             description = "The server to connect to.")
     private InetSocketAddress serverAddress;
 
+    //TODO: Implement RDMA test
+
     @Override
     public Void call() throws Exception {
         if(!isServer && serverAddress == null) {
@@ -75,11 +79,9 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
-        var message = new Message(connection, MessageType.COMMON, "TEST1234");
+        var message = new Message(connection, MessageType.REMOTE_BUF_INFO, "2342535:322554:245");
 
-        LOGGER.info(message.getPayload());
-
-        LOGGER.info("Message: {}", message);
+        LOGGER.info("Send: {}", message);
 
         connection.sendMessage(message);
         connection.pollSend(1);
@@ -98,7 +100,7 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
-        var buffer = ConnectionManager.allocLocalBuffer(connection.getDeviceContext(), Message.getMessageSizeForPayload(8));
+        var buffer = ConnectionManager.allocLocalBuffer(connection.getDeviceContext(), Message.getSize());
 
         long wrId = connection.receive(buffer);
 
@@ -109,7 +111,14 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         var message = new Message(connection, buffer);
 
-        LOGGER.info("Received Message: {}", message);
+        var string = message.getPayload();
+        String[] parts = string.split(":");
+
+        var bufferInformation = new BufferInformation(Long.parseLong(parts[0]), Long.parseLong(parts[1]), Integer.parseInt(parts[2]));
+
+        LOGGER.info("Received: {}", message);
+
+        LOGGER.info("Received: {}", bufferInformation);
 
         ConnectionManager.closeConnection(connection);
 

@@ -17,20 +17,18 @@ public class Message implements NativeObject {
     private static final Logger LOGGER = LoggerFactory.getLogger(Message.class);
 
     private final NativeInteger messageType;
-    private final NativeInteger payloadSize;
     private final NativeString payload;
     private final long handle;
 
     private final RegisteredBuffer byteBuffer;
 
-    private int SIZE;
+    private static final int SIZE = 1024;
 
     private final Connection connection;
 
     public Message(Connection connection, MessageType messageType, String payload) {
         this.connection = connection;
 
-        SIZE = Integer.BYTES + Integer.BYTES + payload.length();
         byteBuffer = ConnectionManager.allocLocalBuffer(connection.getDeviceContext(), SIZE);
 
         this.handle = byteBuffer.getHandle();
@@ -38,14 +36,8 @@ public class Message implements NativeObject {
         this.messageType = new NativeInteger(byteBuffer, 0);
         this.messageType.set(messageType.ordinal());
 
-        this.payloadSize = new NativeInteger(byteBuffer, 4);
-        this.payloadSize.set(payload.length());
-
-        this.payload = new NativeString(byteBuffer, 8, payloadSize.get());
+        this.payload = new NativeString(byteBuffer, 4, SIZE - Integer.BYTES);
         this.payload.set(payload);
-
-
-        LOGGER.info("Payload: {}", this.payload);
     }
 
     public Message(Connection connection, RegisteredBuffer byteBuffer) {
@@ -56,8 +48,7 @@ public class Message implements NativeObject {
         this.handle = byteBuffer.getHandle();
 
         this.messageType = new NativeInteger(byteBuffer, 0);
-        this.payloadSize = new NativeInteger(byteBuffer, 4);
-        this.payload = new NativeString(byteBuffer, 8, payloadSize.get());
+        this.payload = new NativeString(byteBuffer, 4, SIZE - Integer.BYTES);
     }
 
     public void setPayload(String payload) {
@@ -76,12 +67,12 @@ public class Message implements NativeObject {
         return MessageType.values()[messageType.get()];
     }
 
-    public int getPayloadSize() {
-        return payloadSize.get();
-    }
-
     public RegisteredBuffer getByteBuffer() {
         return byteBuffer;
+    }
+
+    public static int getSize() {
+        return SIZE;
     }
 
     @Override
@@ -98,13 +89,7 @@ public class Message implements NativeObject {
     public String toString() {
         return "Message {\n" +
                 "\tmessageType=" + MessageType.values()[messageType.get()] +
-                "\n\tpayloadSize=" + payloadSize.get() +
                 "\n\tpayload=" + payload.get() +
                 "\n}";
     }
-
-    public static int getMessageSizeForPayload(int payloadSize) {
-        return Integer.BYTES + Integer.BYTES + payloadSize;
-    }
-
 }

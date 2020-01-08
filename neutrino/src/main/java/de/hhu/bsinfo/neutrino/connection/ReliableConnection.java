@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ReliableConnection extends Connection{
 
@@ -19,6 +20,7 @@ public class ReliableConnection extends Connection{
 
     private final QueuePair queuePair;
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
+    private final AtomicInteger wrIdProvider;
 
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
@@ -30,6 +32,8 @@ public class ReliableConnection extends Connection{
         if(queuePair == null) {
             throw new IOException("Cannot create queue pair");
         }
+
+        wrIdProvider = new AtomicInteger(0);
     }
 
     @Override
@@ -88,7 +92,7 @@ public class ReliableConnection extends Connection{
         scatterGatherElement.setLength(length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var sendWorkRequest = new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, scatterGatherElement).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).build();
+        var sendWorkRequest = new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, scatterGatherElement).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(wrIdProvider.getAndIncrement()).build();
 
         queuePair.postSend(sendWorkRequest);
 
@@ -97,6 +101,10 @@ public class ReliableConnection extends Connection{
 
     public long sendMessage(Message message) {
         return send(message.getByteBuffer());
+    }
+
+    public long receiveMessage(Message message) {
+        return receive(message.getByteBuffer());
     }
 
     public long receive(RegisteredBuffer data) {
@@ -109,14 +117,14 @@ public class ReliableConnection extends Connection{
         scatterGatherElement.setLength(length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var receiveWorkRequest = new ReceiveWorkRequest.Builder().withScatterGatherElement(scatterGatherElement).build();
+        var receiveWorkRequest = new ReceiveWorkRequest.Builder().withScatterGatherElement(scatterGatherElement).withId(wrIdProvider.getAndIncrement()).build();
 
         queuePair.postReceive(receiveWorkRequest);
 
         return receiveWorkRequest.getId();
     }
 
-    private CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {
+    public CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {
         var completionArray = new CompletionQueue.WorkCompletionArray(count);
         getReceiveCompletionQueue().poll(completionArray);
 
@@ -138,7 +146,7 @@ public class ReliableConnection extends Connection{
         return completionArray.getLength();
     }
 
-    private CompletionQueue.WorkCompletionArray pollSendCompletions(int count) {
+    public CompletionQueue.WorkCompletionArray pollSendCompletions(int count) {
         var completionArray = new CompletionQueue.WorkCompletionArray(count);
         getSendCompletionQueue().poll(completionArray);
 

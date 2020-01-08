@@ -42,7 +42,7 @@ public class ConnectionManager {
 
     }
 
-    public static RegisteredBuffer allocLocalBuffer(DeviceContext deviceContext, int size) {
+    public static RegisteredBuffer allocLocalBuffer(DeviceContext deviceContext, long size) {
         LOGGER.info("Allocate new memory region for device {} of size {}", deviceContext.getDeviceId(), size);
 
         var buffer = deviceContext.getProtectionDomain().allocateMemory(size, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE, AccessFlag.MW_BIND);
@@ -51,7 +51,7 @@ public class ConnectionManager {
         return buffer;
     }
 
-    public static RegisteredBuffer allocLocalBuffer(int deviceId, int size) {
+    public static RegisteredBuffer allocLocalBuffer(int deviceId, long size) {
         return allocLocalBuffer(deviceContexts.get(deviceId), size);
     }
 
