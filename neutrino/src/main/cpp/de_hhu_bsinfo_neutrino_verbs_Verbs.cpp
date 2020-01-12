@@ -1,9 +1,8 @@
 #include <de_hhu_bsinfo_neutrino_verbs_Verbs.h>
 #include <infiniband/verbs.h>
-#include <stddef.h>
-#include <vector>
-#include <neutrino/NativeCall.hpp>
+#include <infiniband/mlx5dv.h>
 #include <fcntl.h>
+#include <neutrino/NativeCall.hpp>
 
 JNIEXPORT jint JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_getOperationFlagCreate(JNIEnv *env, jclass clazz) {
     return O_CREAT;
@@ -811,6 +810,32 @@ JNIEXPORT void JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_setScatterGatherE
     auto scatterGatherElementList = NativeCall::castHandle<ibv_sge>(scatterGatherElementListHandle);
 
     ibv_wr_set_sge_list(extendedQueuePair, scatterGatherElementCount, scatterGatherElementList);
+}
+
+JNIEXPORT jboolean JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_mlx5IsSupported (JNIEnv *env, jclass clazz, jlong contextHandle) {
+    auto context = NativeCall::castHandle<ibv_context>(contextHandle);
+
+    return mlx5dv_is_supported(context->device);
+}
+
+JNIEXPORT void JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_mlx5CreateQueuePair (JNIEnv *env, jclass clazz, jlong contextHandle, jlong attributesHandle, jlong mlx5AttributesHandle, jlong resultHandle) {
+    auto result = NativeCall::castHandle<NativeCall::Result>(resultHandle);
+    auto context = NativeCall::castHandle<ibv_context>(contextHandle);
+    auto attributes = NativeCall::castHandle<ibv_qp_init_attr_ex>(attributesHandle);
+    auto mlx5Attributes = NativeCall::castHandle<mlx5dv_qp_init_attr>(mlx5AttributesHandle);
+
+    auto queuePair = mlx5dv_create_qp(context, attributes, mlx5Attributes);
+
+    NativeCall::setResult(result, queuePair == nullptr ? errno : 0, queuePair);
+}
+
+JNIEXPORT void JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_mlx5ExtendedQueuePairFromExtendedQueuePair (JNIEnv *env, jclass clazz, jlong extendedQueuePairHandle, jlong resultHandle) {
+    auto result = NativeCall::castHandle<NativeCall::Result>(resultHandle);
+    auto extendedQueuePair = NativeCall::castHandle<ibv_qp_ex>(extendedQueuePairHandle);
+
+    auto mlx5ExtendedQueuePair = mlx5dv_qp_ex_from_ibv_qp_ex(extendedQueuePair);
+
+    NativeCall::setResult(result, mlx5ExtendedQueuePair == nullptr ? errno : 0, mlx5ExtendedQueuePair);
 }
 
 JNIEXPORT void JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_benchmarkDummyMethod1 (JNIEnv *env, jclass clazz, jlong resultHandle) {

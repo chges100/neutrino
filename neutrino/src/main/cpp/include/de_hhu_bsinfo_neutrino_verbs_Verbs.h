@@ -819,6 +819,30 @@ JNIEXPORT void JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_setScatterGatherE
 
 /*
  * Class:     de_hhu_bsinfo_neutrino_verbs_Verbs
+ * Method:    mlx5IsSupported
+ * Signature: (J)Z
+ */
+JNIEXPORT jboolean JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_mlx5IsSupported
+  (JNIEnv *, jclass, jlong);
+
+/*
+ * Class:     de_hhu_bsinfo_neutrino_verbs_Verbs
+ * Method:    mlx5CreateQueuePair
+ * Signature: (JJJJ)V
+ */
+JNIEXPORT void JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_mlx5CreateQueuePair
+  (JNIEnv *, jclass, jlong, jlong, jlong, jlong);
+
+/*
+ * Class:     de_hhu_bsinfo_neutrino_verbs_Verbs
+ * Method:    mlx5ExtendedQueuePairFromExtendedQueuePair
+ * Signature: (JJ)V
+ */
+JNIEXPORT void JNICALL Java_de_hhu_bsinfo_neutrino_verbs_Verbs_mlx5ExtendedQueuePairFromExtendedQueuePair
+  (JNIEnv *, jclass, jlong, jlong);
+
+/*
+ * Class:     de_hhu_bsinfo_neutrino_verbs_Verbs
  * Method:    benchmarkDummyMethod1
  * Signature: (J)V
  */
