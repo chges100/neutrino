@@ -1,12 +1,10 @@
 package de.hhu.bsinfo.neutrino.connection;
 
-import de.hhu.bsinfo.neutrino.verbs.CompletionQueue;
-import de.hhu.bsinfo.neutrino.verbs.PortAttributes;
+import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class QPSocket {
@@ -21,6 +19,8 @@ public abstract class QPSocket {
     protected final CompletionQueue sendCompletionQueue;
     protected final CompletionQueue receiveCompletionQueue;
     protected final PortAttributes portAttributes;
+
+    protected QueuePair queuePair;
 
     protected final AtomicInteger wrIdProvider;
 
@@ -48,6 +48,18 @@ public abstract class QPSocket {
 
     abstract void init() throws IOException;
     abstract void close() throws IOException;
+
+    protected long postSend(SendWorkRequest workRequest) {
+        queuePair.postSend(workRequest);
+
+        return workRequest.getId();
+    }
+
+    protected long postReceive(ReceiveWorkRequest workRequest) {
+        queuePair.postReceive(workRequest);
+
+        return workRequest.getId();
+    }
 
     public DeviceContext getDeviceContext() {
         return deviceContext;

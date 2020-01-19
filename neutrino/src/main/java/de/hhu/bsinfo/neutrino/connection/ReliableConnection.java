@@ -19,7 +19,6 @@ public class ReliableConnection extends QPSocket implements Connectable, Executo
 
     private final int connectionId;
 
-    private final QueuePair queuePair;
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
@@ -108,12 +107,6 @@ public class ReliableConnection extends QPSocket implements Connectable, Executo
         return postSend(sendWorkRequest);
     }
 
-    private long postSend(SendWorkRequest workRequest) {
-        queuePair.postSend(workRequest);
-
-        return workRequest.getId();
-    }
-
     public long receive(RegisteredBuffer data) {
         return receive(data, 0, (int) data.capacity());
     }
@@ -126,15 +119,12 @@ public class ReliableConnection extends QPSocket implements Connectable, Executo
 
         var receiveWorkRequest = new ReceiveWorkRequest.Builder().withScatterGatherElement(scatterGatherElement).withId(wrIdProvider.getAndIncrement()).build();
 
-        queuePair.postReceive(receiveWorkRequest);
-
-        return receiveWorkRequest.getId();
+        return postReceive(receiveWorkRequest);
     }
 
     private CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {
         var completionArray = new CompletionQueue.WorkCompletionArray(count);
         receiveCompletionQueue.poll(completionArray);
-
 
         return completionArray;
     }
