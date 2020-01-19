@@ -1,5 +1,6 @@
 package de.hhu.bsinfo.neutrino.buffer;
 
+import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
 import de.hhu.bsinfo.neutrino.verbs.QueuePair;
 import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
 import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest.OpCode;
@@ -7,20 +8,20 @@ import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest.SendFlag;
 
 public class RemoteBuffer {
 
-    private final QueuePair queuePair;
+    private final ReliableConnection reliableConnection;
     private final long address;
     private final long capacity;
     private final int key;
 
-    public RemoteBuffer(QueuePair queuePair, long address, long capacity, int key) {
-        this.queuePair = queuePair;
+    public RemoteBuffer(ReliableConnection reliableConnection, long address, long capacity, int key) {
+        this.reliableConnection = reliableConnection;
         this.address = address;
         this.capacity = capacity;
         this.key = key;
     }
 
-    public RemoteBuffer(QueuePair queuePair, BufferInformation bufferInformation) {
-        this.queuePair = queuePair;
+    public RemoteBuffer(ReliableConnection reliableConnection, BufferInformation bufferInformation) {
+        this.reliableConnection = reliableConnection;
         this.address = bufferInformation.getAddress();
         this.capacity = bufferInformation.getCapacity();
         this.key = bufferInformation.getRemoteKey();
@@ -47,15 +48,7 @@ public class RemoteBuffer {
     }
 
     private long execute(final OpCode operation, long index, RegisteredBuffer buffer, long offset, long length) {
-        var elements = buffer.split(offset, length);
-
-        var request = new SendWorkRequest.RdmaBuilder(operation, elements, address + index, key)
-                .withSendFlags(SendFlag.SIGNALED)
-                .build();
-
-        queuePair.postSend(request);
-
-        return request.getId();
+        return reliableConnection.execute(buffer, operation, offset, length, this.address, this.key, index);
     }
 
     public long capacity() {

@@ -88,33 +88,6 @@ public class ConnectionManager {
         return connection;
     }
 
-    public static RDMAConnection createRDMAConnection(int deviceId, Socket socket) throws IOException {
-        return createRDMAConnection(deviceContexts.get(deviceId), socket);
-
-    }
-
-    public static RDMAConnection createUnconnectedRDMAConnection(int deviceId) throws IOException {
-        return createUnconnectedRDMAConnection(deviceContexts.get(deviceId));
-    }
-
-    public static RDMAConnection createRDMAConnection(DeviceContext deviceContext, Socket socket) throws IOException {
-        var connection = createUnconnectedRDMAConnection(deviceContext);
-        connection.connect(socket);
-
-        return connection;
-    }
-
-    public static RDMAConnection createUnconnectedRDMAConnection(DeviceContext deviceContext) throws IOException {
-        var connection = new RDMAConnection(deviceContext);
-        connections.add(connection);
-
-        LOGGER.info("Create new reliable connection {}", connection.getConnectionId());
-
-        connection.init();
-
-        return connection;
-    }
-
     public static void closeConnection(Connection connection) throws IOException {
         LOGGER.info("Close connection {}", connection.getConnectionId());
         connection.close();

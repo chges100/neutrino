@@ -83,24 +83,39 @@ public class ReliableConnection extends Connection{
     }
 
     public long send(RegisteredBuffer data) {
-        return send(data, 0, (int) data.capacity());
+        return send(data, 0,  data.capacity());
     }
 
-    public long send(RegisteredBuffer data, int offset, int length) {
+    public long send(RegisteredBuffer data, long offset, long length) {
         var scatterGatherElement = (ScatterGatherElement) Verbs.getPoolableInstance(ScatterGatherElement.class);
         scatterGatherElement.setAddress(data.getHandle() + offset);
-        scatterGatherElement.setLength(length);
+        scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
         var sendWorkRequest = new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, scatterGatherElement).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(wrIdProvider.getAndIncrement()).build();
 
-        queuePair.postSend(sendWorkRequest);
+        return postSWR(sendWorkRequest);
+    }
 
-        return sendWorkRequest.getId();
+    public long execute(RegisteredBuffer data, SendWorkRequest.OpCode opCode, long offset, long length, long remoteAddress, int remoteKey, long remoteOffset) {
+        var scatterGatherElement = (ScatterGatherElement) Verbs.getPoolableInstance(ScatterGatherElement.class);
+        scatterGatherElement.setAddress(data.getHandle() + offset);
+        scatterGatherElement.setLength((int) length);
+        scatterGatherElement.setLocalKey(data.getLocalKey());
+
+        var sendWorkRequest = new SendWorkRequest.RdmaBuilder(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(wrIdProvider.getAndIncrement()).build();
+
+        return postSWR(sendWorkRequest);
     }
 
     public long sendMessage(Message message) {
         return send(message.getByteBuffer());
+    }
+
+    private long postSWR(SendWorkRequest workRequest) {
+        queuePair.postSend(workRequest);
+
+        return workRequest.getId();
     }
 
     public long receiveMessage(Message message) {
