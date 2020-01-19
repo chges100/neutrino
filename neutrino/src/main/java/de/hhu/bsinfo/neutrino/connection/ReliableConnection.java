@@ -1,7 +1,8 @@
 package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
-import de.hhu.bsinfo.neutrino.connection.message.Message;
+import de.hhu.bsinfo.neutrino.connection.interfaces.Connectable;
+import de.hhu.bsinfo.neutrino.connection.interfaces.Executor;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,28 +13,26 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class ReliableConnection extends Connection{
+public class ReliableConnection extends QPSocket implements Connectable, Executor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
 
-    private static final ConnectionType connectionType = ConnectionType.ReliableConnection;
+    private final int connectionId;
 
     private final QueuePair queuePair;
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
-    private final AtomicInteger wrIdProvider;
-
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
         super(deviceContext);
 
         queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
-                QueuePair.Type.RC, getSendCompletionQueue(), getReceiveCompletionQueue(), getSendQueueSize(), getReceiveQueueSize(), 1, 1).build());
+                QueuePair.Type.RC, sendCompletionQueue, receiveCompletionQueue, sendQueueSize, receiveQueueSize, 1, 1).build());
         if(queuePair == null) {
             throw new IOException("Cannot create queue pair");
         }
 
-        wrIdProvider = new AtomicInteger(0);
+        connectionId = ConnectionManager.provideConnectionId();
     }
 
     @Override
@@ -51,7 +50,7 @@ public class ReliableConnection extends Connection{
             throw new IOException("Connection is already connected");
         }
 
-        var localInfo = new ConnectionInformation((byte) 1, getPortAttributes().getLocalId(), queuePair.getQueuePairNumber());
+        var localInfo = new ConnectionInformation((byte) 1, portAttributes.getLocalId(), queuePair.getQueuePairNumber());
 
         LOGGER.info("Local connection information: {}", localInfo);
 
@@ -94,9 +93,10 @@ public class ReliableConnection extends Connection{
 
         var sendWorkRequest = new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, scatterGatherElement).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(wrIdProvider.getAndIncrement()).build();
 
-        return postSWR(sendWorkRequest);
+        return postSend(sendWorkRequest);
     }
 
+    @Override
     public long execute(RegisteredBuffer data, SendWorkRequest.OpCode opCode, long offset, long length, long remoteAddress, int remoteKey, long remoteOffset) {
         var scatterGatherElement = (ScatterGatherElement) Verbs.getPoolableInstance(ScatterGatherElement.class);
         scatterGatherElement.setAddress(data.getHandle() + offset);
@@ -105,21 +105,13 @@ public class ReliableConnection extends Connection{
 
         var sendWorkRequest = new SendWorkRequest.RdmaBuilder(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(wrIdProvider.getAndIncrement()).build();
 
-        return postSWR(sendWorkRequest);
+        return postSend(sendWorkRequest);
     }
 
-    public long sendMessage(Message message) {
-        return send(message.getByteBuffer());
-    }
-
-    private long postSWR(SendWorkRequest workRequest) {
+    private long postSend(SendWorkRequest workRequest) {
         queuePair.postSend(workRequest);
 
         return workRequest.getId();
-    }
-
-    public long receiveMessage(Message message) {
-        return receive(message.getByteBuffer());
     }
 
     public long receive(RegisteredBuffer data) {
@@ -139,9 +131,9 @@ public class ReliableConnection extends Connection{
         return receiveWorkRequest.getId();
     }
 
-    public CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {
+    private CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {
         var completionArray = new CompletionQueue.WorkCompletionArray(count);
-        getReceiveCompletionQueue().poll(completionArray);
+        receiveCompletionQueue.poll(completionArray);
 
 
         return completionArray;
@@ -161,9 +153,9 @@ public class ReliableConnection extends Connection{
         return completionArray.getLength();
     }
 
-    public CompletionQueue.WorkCompletionArray pollSendCompletions(int count) {
+    private CompletionQueue.WorkCompletionArray pollSendCompletions(int count) {
         var completionArray = new CompletionQueue.WorkCompletionArray(count);
-        getSendCompletionQueue().poll(completionArray);
+        sendCompletionQueue.poll(completionArray);
 
 
         return completionArray;
@@ -186,17 +178,13 @@ public class ReliableConnection extends Connection{
     @Override
     public void close() throws IOException {
         queuePair.close();
-        super.close();
+    }
+
+    public int getConnectionId() {
+        return connectionId;
     }
 
     public QueuePair getQueuePair() {
         return queuePair;
     }
-
-    public static ConnectionType getConnectionType() {
-        return connectionType;
-    }
-
-
-
 }

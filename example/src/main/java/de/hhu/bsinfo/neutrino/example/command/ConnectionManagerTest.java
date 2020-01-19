@@ -6,7 +6,6 @@ import de.hhu.bsinfo.neutrino.connection.ConnectionManager;
 
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
-import de.hhu.bsinfo.neutrino.example.util.RdmaContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -16,7 +15,6 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
 
 @CommandLine.Command(
         name = "con-mgr-test",
@@ -83,7 +81,7 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Send: {}", message);
 
-        connection.sendMessage(message);
+        connection.send(message.getByteBuffer());
         connection.pollSend(1);
 
         ConnectionManager.closeConnection(connection);

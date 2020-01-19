@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -20,7 +19,7 @@ public class ConnectionManager {
 
     private static final ArrayList<DeviceContext> deviceContexts;
     private static final Deque<RegisteredBuffer> localBuffers;
-    private static final ArrayList<Connection> connections;
+    private static final ArrayList<ReliableConnection> connections;
 
     private static final AtomicInteger idCounter = new AtomicInteger();
 
@@ -88,7 +87,7 @@ public class ConnectionManager {
         return connection;
     }
 
-    public static void closeConnection(Connection connection) throws IOException {
+    public static void closeConnection(ReliableConnection connection) throws IOException {
         LOGGER.info("Close connection {}", connection.getConnectionId());
         connection.close();
         connections.remove(connection);
