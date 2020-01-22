@@ -4,6 +4,7 @@ import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.connector.SocketConnector;
 import de.hhu.bsinfo.neutrino.verbs.AccessFlag;
 import de.hhu.bsinfo.neutrino.verbs.Context;
+import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +23,7 @@ public class ConnectionManager {
     private static final ArrayList<DeviceContext> deviceContexts;
     private static final Deque<RegisteredBuffer> localBuffers;
     private static final ArrayList<ReliableConnection> connections;
+    private static final ArrayList<UnreliableDatagram> unreliableDatagrams;
 
     private static final AtomicInteger idCounter = new AtomicInteger();
 
@@ -30,6 +32,7 @@ public class ConnectionManager {
         deviceContexts = new ArrayList<>();
         localBuffers = new LinkedList<>();
         connections = new ArrayList<>();
+        unreliableDatagrams = new ArrayList<>();
 
 
         try {
@@ -99,10 +102,29 @@ public class ConnectionManager {
         return connection;
     }
 
+    public static UnreliableDatagram createUnreliableDatagram(int deviceId) throws IOException {
+        return createUnreliableDatagram(deviceContexts.get(deviceId));
+    }
+
+    public static UnreliableDatagram createUnreliableDatagram(DeviceContext deviceContext) throws IOException {
+        var unreliableDatagram = new UnreliableDatagram(deviceContext);
+        unreliableDatagrams.add(unreliableDatagram);
+
+        unreliableDatagram.init();
+
+        return unreliableDatagram;
+    }
+
     public static void closeConnection(ReliableConnection connection) throws IOException {
         LOGGER.info("Close connection {}", connection.getConnectionId());
         connection.close();
         connections.remove(connection);
+    }
+
+    public static void closeUnreliableDatagram(UnreliableDatagram unreliableDatagram) throws IOException {
+        LOGGER.info("Close Unreliable Datagram");
+        unreliableDatagram.close();
+        unreliableDatagrams.remove(unreliableDatagram);
     }
 
     public static int provideConnectionId() {

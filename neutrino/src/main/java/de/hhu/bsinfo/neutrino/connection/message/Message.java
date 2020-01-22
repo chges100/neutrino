@@ -2,6 +2,7 @@ package de.hhu.bsinfo.neutrino.connection.message;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.ConnectionManager;
+import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
 import de.hhu.bsinfo.neutrino.data.*;
 import org.slf4j.Logger;
@@ -19,12 +20,9 @@ public class Message implements NativeObject {
 
     private static final int SIZE = 1024;
 
-    private final ReliableConnection connection;
+    public Message(DeviceContext deviceContext, MessageType messageType, String payload) {
 
-    public Message(ReliableConnection connection, MessageType messageType, String payload) {
-        this.connection = connection;
-
-        byteBuffer = ConnectionManager.allocLocalBuffer(connection.getDeviceContext(), SIZE);
+        byteBuffer = ConnectionManager.allocLocalBuffer(deviceContext, SIZE);
 
         this.handle = byteBuffer.getHandle();
 
@@ -35,8 +33,7 @@ public class Message implements NativeObject {
         this.payload.set(payload);
     }
 
-    public Message(ReliableConnection connection, RegisteredBuffer byteBuffer) {
-        this.connection = connection;
+    public Message(RegisteredBuffer byteBuffer) {
 
         this.byteBuffer = byteBuffer;
 

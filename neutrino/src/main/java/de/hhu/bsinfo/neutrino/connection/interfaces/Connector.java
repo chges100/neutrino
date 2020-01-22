@@ -1,6 +1,6 @@
 package de.hhu.bsinfo.neutrino.connection.interfaces;
 
-import de.hhu.bsinfo.neutrino.connection.ConnectionInformation;
+import de.hhu.bsinfo.neutrino.connection.util.ConnectionInformation;
 
 import java.io.IOException;
 

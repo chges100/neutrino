@@ -6,6 +6,7 @@ import de.hhu.bsinfo.neutrino.connection.ConnectionManager;
 
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
+import de.hhu.bsinfo.neutrino.connection.util.UDRemoteInformationExchanger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -48,6 +49,11 @@ public class ConnectionManagerTest implements Callable<Void> {
             description = "The server to connect to.")
     private InetSocketAddress serverAddress;
 
+    @CommandLine.Option(
+            names = {"-m", "--mode"},
+            description = "Chosen test mode [0 -> ReliableConnection, 1 -> UnreliableDatagram.")
+    private int mode;
+
     //TODO: Implement RDMA test
 
     @Override
@@ -58,38 +64,48 @@ public class ConnectionManagerTest implements Callable<Void> {
         }
 
         if(isServer) {
-            startServer();
+            if(mode == 0) {
+                startServerRC();
+            } else if(mode == 1) {
+                startServerUD();
+            }
         } else {
-            startClient();
+            if(mode == 0) {
+                startClientRC();
+            } else if(mode == 1) {
+                startClientUD();
+            }
         }
 
         return null;
     }
 
-    public void startServer() throws IOException {
+    public void startServerRC() throws IOException {
 
         var serverSocket = new ServerSocket(port);
         var socket = serverSocket.accept();
 
         var connection = ConnectionManager.createReliableConnection(deviceId,  socket);
 
-        socket.close();
-
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
-        var message = new Message(connection, MessageType.REMOTE_BUF_INFO, "2342535:322554:245");
-
-        LOGGER.info("Send: {}", message);
+        var message = new Message(connection.getDeviceContext(), MessageType.REMOTE_BUF_INFO, "2342535:322554:245");
 
         connection.send(message.getByteBuffer());
-        connection.pollSend(1);
+
+        int sent = 0;
+        do{
+            sent = connection.pollSend(1);
+        } while(0 == sent);
+
+        LOGGER.info("Send: {}", message);
 
         ConnectionManager.closeConnection(connection);
 
         LOGGER.info("Connection closed");
     }
 
-    public void startClient() throws IOException {
+    public void startClientRC() throws IOException {
         var connection = ConnectionManager.createReliableConnection(deviceId, serverAddress);
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
@@ -103,7 +119,7 @@ public class ConnectionManagerTest implements Callable<Void> {
             received = connection.pollReceive(1);
         } while(0 == received);
 
-        var message = new Message(connection, buffer);
+        var message = new Message(buffer);
 
         var string = message.getPayload();
         String[] parts = string.split(":");
@@ -117,6 +133,68 @@ public class ConnectionManagerTest implements Callable<Void> {
         ConnectionManager.closeConnection(connection);
 
         LOGGER.info("Connection closed");
+
+
+    }
+
+    public void startServerUD() throws IOException {
+
+        var serverSocket = new ServerSocket(port);
+        var socket = serverSocket.accept();
+
+        var unreliableDatagram = ConnectionManager.createUnreliableDatagram(deviceId);
+        var remoteInformation = new UDRemoteInformationExchanger(socket, unreliableDatagram).getRemoteInformation();
+
+        LOGGER.info("Unreliable datagram created");
+
+        var message = new Message(unreliableDatagram.getDeviceContext(), MessageType.REMOTE_BUF_INFO, "2342535:322554:245");
+
+        unreliableDatagram.send(message.getByteBuffer(), remoteInformation);
+
+        int sent = 0;
+        do{
+            sent = unreliableDatagram.pollSend(1);
+        } while(0 == sent);
+
+        LOGGER.info("Send: {}", message);
+
+        ConnectionManager.closeUnreliableDatagram(unreliableDatagram);
+
+        LOGGER.info("Unreliable Datagram closed");
+    }
+
+    public void startClientUD() throws IOException {
+        var unreliableDatagram = ConnectionManager.createUnreliableDatagram(deviceId);
+
+        var remoteInfo = new UDRemoteInformationExchanger(serverAddress, unreliableDatagram).getRemoteInformation();
+
+        LOGGER.info("Unreliable datagram created");
+
+        var buffer = ConnectionManager.allocLocalBuffer(unreliableDatagram.getDeviceContext(), Message.getSize());
+
+        long wrId = unreliableDatagram.receive(buffer);
+
+        LOGGER.info("RWR id : {}", wrId);
+
+        int received = 0;
+        do{
+            received = unreliableDatagram.pollReceive(1);
+        } while(0 == received);
+
+        var message = new Message(buffer);
+
+        var string = message.getPayload();
+        String[] parts = string.split(":");
+
+        var bufferInformation = new BufferInformation(Long.parseLong(parts[0]), Long.parseLong(parts[1]), Integer.parseInt(parts[2]));
+
+        LOGGER.info("Received: {}", message);
+
+        LOGGER.info("Received: {}", bufferInformation);
+
+        ConnectionManager.closeUnreliableDatagram(unreliableDatagram);
+
+        LOGGER.info("Unreliable Datagram closed");
 
 
     }

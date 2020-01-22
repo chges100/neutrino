@@ -3,15 +3,13 @@ package de.hhu.bsinfo.neutrino.connection;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Connectable;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Executor;
+import de.hhu.bsinfo.neutrino.connection.util.ConnectionInformation;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.Socket;
-import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ReliableConnection extends QPSocket implements Connectable, Executor {
 

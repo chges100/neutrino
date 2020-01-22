@@ -1,24 +1,27 @@
-package de.hhu.bsinfo.neutrino.connection;
+package de.hhu.bsinfo.neutrino.connection.util;
 
 import java.nio.ByteBuffer;
 import java.util.StringJoiner;
 
-public class ConnectionInformation {
+public class UDRemoteInformation {
 
     private final byte portNumber;
     private final short localId;
     private final int queuePairNumber;
+    private final int queuePairKey;
 
-    public ConnectionInformation(byte portNumber, short localId, int queuePairNumber) {
+    public UDRemoteInformation(byte portNumber, short localId, int queuePairNumber, int queuePairKey) {
         this.portNumber = portNumber;
         this.localId = localId;
         this.queuePairNumber = queuePairNumber;
+        this.queuePairKey = queuePairKey;
     }
 
-    public ConnectionInformation(ByteBuffer buffer) {
+    public UDRemoteInformation(ByteBuffer buffer) {
         portNumber = buffer.get();
         localId = buffer.getShort();
         queuePairNumber = buffer.getInt();
+        queuePairKey = buffer.getInt();
     }
 
     public byte getPortNumber() {
@@ -33,12 +36,18 @@ public class ConnectionInformation {
         return queuePairNumber;
     }
 
+    public int getQueuePairKey() {
+        return queuePairKey;
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", ConnectionInformation.class.getSimpleName() + "[", "]")
                 .add("portNumber=" + portNumber)
                 .add("localId=" + localId)
                 .add("queuePairNumber=" + queuePairNumber)
+                .add("queuePairKey=" + queuePairKey)
                 .toString();
     }
+
 }
