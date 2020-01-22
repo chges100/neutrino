@@ -42,29 +42,12 @@ public class ReliableConnection extends QPSocket implements Connectable, Executo
     }
 
     @Override
-    public void connect(Socket socket) throws IOException {
+    public void connect(ConnectionInformation remoteInfo) throws IOException {
 
         if(isConnected.getAndSet(true)){
             LOGGER.error("Connection already connected");
             throw new IOException("Connection is already connected");
         }
-
-        var localInfo = new ConnectionInformation((byte) 1, portAttributes.getLocalId(), queuePair.getQueuePairNumber());
-
-        LOGGER.info("Local connection information: {}", localInfo);
-
-        socket.getOutputStream().write(ByteBuffer.allocate(Byte.BYTES + Short.BYTES + Integer.BYTES)
-                .put(localInfo.getPortNumber())
-                .putShort(localInfo.getLocalId())
-                .putInt(localInfo.getQueuePairNumber())
-                .array());
-
-        LOGGER.info("Waiting for remote connection information");
-
-        var byteBuffer = ByteBuffer.wrap(socket.getInputStream().readNBytes(Byte.BYTES + Short.BYTES + Integer.BYTES));
-        var remoteInfo = new ConnectionInformation(byteBuffer);
-
-        LOGGER.info("Received connection information: {}", remoteInfo);
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToReceiveAttributesRC(
                 remoteInfo.getQueuePairNumber(), remoteInfo.getLocalId(), remoteInfo.getPortNumber()))) {

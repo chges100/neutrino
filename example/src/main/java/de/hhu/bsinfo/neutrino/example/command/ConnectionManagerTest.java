@@ -90,11 +90,7 @@ public class ConnectionManagerTest implements Callable<Void> {
     }
 
     public void startClient() throws IOException {
-        var socket = new Socket(serverAddress.getAddress(), serverAddress.getPort());
-
-        var connection = ConnectionManager.createReliableConnection(deviceId, socket);
-
-        socket.close();
+        var connection = ConnectionManager.createReliableConnection(deviceId, serverAddress);
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 

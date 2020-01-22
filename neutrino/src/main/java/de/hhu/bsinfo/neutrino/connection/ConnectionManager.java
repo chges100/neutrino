@@ -1,12 +1,14 @@
 package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
+import de.hhu.bsinfo.neutrino.connection.connector.SocketConnector;
 import de.hhu.bsinfo.neutrino.verbs.AccessFlag;
 import de.hhu.bsinfo.neutrino.verbs.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -71,9 +73,19 @@ public class ConnectionManager {
 
     public static ReliableConnection createReliableConnection(DeviceContext deviceContext, Socket socket) throws IOException {
         var connection = createUnconnectedReliableConnection(deviceContext);
-        connection.connect(socket);
+        var connector = new SocketConnector(socket, connection);
+
+        connector.connect();
 
         return connection;
+    }
+
+    public static ReliableConnection createReliableConnection(DeviceContext deviceContext, InetSocketAddress remoteAddress) throws IOException {
+        return createReliableConnection(deviceContext, new Socket(remoteAddress.getAddress(), remoteAddress.getPort()));
+    }
+
+    public static ReliableConnection createReliableConnection(int deviceId, InetSocketAddress remoteAddress) throws IOException {
+        return createReliableConnection(deviceContexts.get(deviceId), remoteAddress);
     }
 
     public static ReliableConnection createUnconnectedReliableConnection(DeviceContext deviceContext) throws IOException {

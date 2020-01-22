@@ -9,13 +9,13 @@ public class ConnectionInformation {
     private final short localId;
     private final int queuePairNumber;
 
-    ConnectionInformation(byte portNumber, short localId, int queuePairNumber) {
+    public ConnectionInformation(byte portNumber, short localId, int queuePairNumber) {
         this.portNumber = portNumber;
         this.localId = localId;
         this.queuePairNumber = queuePairNumber;
     }
 
-    ConnectionInformation(ByteBuffer buffer) {
+    public ConnectionInformation(ByteBuffer buffer) {
         portNumber = buffer.get();
         localId = buffer.getShort();
         queuePairNumber = buffer.getInt();

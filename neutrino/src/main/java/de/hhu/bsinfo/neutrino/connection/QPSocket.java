@@ -64,4 +64,12 @@ public abstract class QPSocket {
     public DeviceContext getDeviceContext() {
         return deviceContext;
     }
+
+    public PortAttributes getPortAttributes() {
+        return portAttributes;
+    }
+
+    public QueuePair getQueuePair() {
+        return queuePair;
+    }
 }
