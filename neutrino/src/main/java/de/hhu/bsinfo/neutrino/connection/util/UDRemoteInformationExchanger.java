@@ -44,7 +44,7 @@ public class UDRemoteInformationExchanger {
         var byteBuffer = ByteBuffer.wrap(socket.getInputStream().readNBytes(Byte.BYTES + Short.BYTES + Integer.BYTES + Integer.BYTES));
         var remoteInfo = new UDRemoteInformation(byteBuffer);
 
-        LOGGER.info("Received connection information: {}", remoteInfo);
+        LOGGER.info("Received remote information: {}", remoteInfo);
 
         socket.close();
 

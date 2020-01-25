@@ -10,12 +10,14 @@ import de.hhu.bsinfo.neutrino.connection.util.UDRemoteInformationExchanger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
+import sun.misc.Unsafe;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 
 @CommandLine.Command(
         name = "con-mgr-test",
@@ -137,7 +139,7 @@ public class ConnectionManagerTest implements Callable<Void> {
 
     }
 
-    public void startServerUD() throws IOException {
+    public void startServerUD() throws IOException, Exception {
 
         var serverSocket = new ServerSocket(port);
         var socket = serverSocket.accept();
@@ -148,6 +150,9 @@ public class ConnectionManagerTest implements Callable<Void> {
         LOGGER.info("Unreliable datagram created");
 
         var message = new Message(unreliableDatagram.getDeviceContext(), MessageType.REMOTE_BUF_INFO, "2342535:322554:245");
+
+        // Only for test purpose
+        TimeUnit.SECONDS.sleep(1);
 
         unreliableDatagram.send(message.getByteBuffer(), remoteInformation);
 

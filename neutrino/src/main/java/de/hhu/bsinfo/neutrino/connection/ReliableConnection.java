@@ -89,13 +89,13 @@ public class ReliableConnection extends QPSocket implements Connectable, Executo
     }
 
     public long receive(RegisteredBuffer data) {
-        return receive(data, 0, (int) data.capacity());
+        return receive(data, 0, data.capacity());
     }
 
-    public long receive(RegisteredBuffer data, int offset, int length) {
+    public long receive(RegisteredBuffer data, long offset, long length) {
         var scatterGatherElement = (ScatterGatherElement) Verbs.getPoolableInstance(ScatterGatherElement.class);
         scatterGatherElement.setAddress(data.getHandle() + offset);
-        scatterGatherElement.setLength(length);
+        scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
         var receiveWorkRequest = new ReceiveWorkRequest.Builder().withScatterGatherElement(scatterGatherElement).withId(wrIdProvider.getAndIncrement()).build();
