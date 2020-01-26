@@ -3,19 +3,19 @@ package de.hhu.bsinfo.neutrino.connection.util;
 import java.nio.ByteBuffer;
 import java.util.StringJoiner;
 
-public class ConnectionInformation {
+public class RCInformation {
 
     private final byte portNumber;
     private final short localId;
     private final int queuePairNumber;
 
-    public ConnectionInformation(byte portNumber, short localId, int queuePairNumber) {
+    public RCInformation(byte portNumber, short localId, int queuePairNumber) {
         this.portNumber = portNumber;
         this.localId = localId;
         this.queuePairNumber = queuePairNumber;
     }
 
-    public ConnectionInformation(ByteBuffer buffer) {
+    public RCInformation(ByteBuffer buffer) {
         portNumber = buffer.get();
         localId = buffer.getShort();
         queuePairNumber = buffer.getInt();
@@ -35,7 +35,7 @@ public class ConnectionInformation {
 
     @Override
     public String toString() {
-        return new StringJoiner(", ", ConnectionInformation.class.getSimpleName() + "[", "]")
+        return new StringJoiner(", ", RCInformation.class.getSimpleName() + "[", "]")
                 .add("portNumber=" + portNumber)
                 .add("localId=" + localId)
                 .add("queuePairNumber=" + queuePairNumber)

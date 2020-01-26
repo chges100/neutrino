@@ -3,10 +3,8 @@ package de.hhu.bsinfo.neutrino.connection.dynamic;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
-import de.hhu.bsinfo.neutrino.connection.StaticConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
-import de.hhu.bsinfo.neutrino.connection.util.SocketConnector;
-import de.hhu.bsinfo.neutrino.connection.util.UDRemoteInformationExchanger;
+import de.hhu.bsinfo.neutrino.connection.util.SocketRCInformationExchanger;
 import de.hhu.bsinfo.neutrino.verbs.AccessFlag;
 import de.hhu.bsinfo.neutrino.verbs.Context;
 import org.slf4j.Logger;
@@ -80,7 +78,7 @@ public class DynamicConnectionManager {
 
     public static ReliableConnection createReliableConnection(DeviceContext deviceContext, Socket socket) throws IOException {
         var connection = createUnconnectedReliableConnection(deviceContext);
-        var connector = new SocketConnector(socket, connection);
+        var connector = new SocketRCInformationExchanger(socket, connection);
 
         connector.connect();
 

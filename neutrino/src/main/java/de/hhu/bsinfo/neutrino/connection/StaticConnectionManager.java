@@ -1,7 +1,7 @@
 package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
-import de.hhu.bsinfo.neutrino.connection.util.SocketConnector;
+import de.hhu.bsinfo.neutrino.connection.util.SocketRCInformationExchanger;
 import de.hhu.bsinfo.neutrino.verbs.AccessFlag;
 import de.hhu.bsinfo.neutrino.verbs.Context;
 import org.slf4j.Logger;
@@ -75,7 +75,7 @@ public class StaticConnectionManager {
 
     public static ReliableConnection createReliableConnection(DeviceContext deviceContext, Socket socket) throws IOException {
         var connection = createUnconnectedReliableConnection(deviceContext);
-        var connector = new SocketConnector(socket, connection);
+        var connector = new SocketRCInformationExchanger(socket, connection);
 
         connector.connect();
 

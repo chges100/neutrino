@@ -3,7 +3,7 @@ package de.hhu.bsinfo.neutrino.connection;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Connectable;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Executor;
-import de.hhu.bsinfo.neutrino.connection.util.ConnectionInformation;
+import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ReliableConnection extends QPSocket implements Connectable, Executor {
+public class ReliableConnection extends QPSocket implements Connectable<RCInformation>, Executor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
 
@@ -40,7 +40,7 @@ public class ReliableConnection extends QPSocket implements Connectable, Executo
     }
 
     @Override
-    public void connect(ConnectionInformation remoteInfo) throws IOException {
+    public void connect(RCInformation remoteInfo) throws IOException {
 
         if(isConnected.getAndSet(true)){
             LOGGER.error("Connection already connected");

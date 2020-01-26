@@ -7,7 +7,7 @@ import de.hhu.bsinfo.neutrino.connection.StaticConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
-import de.hhu.bsinfo.neutrino.connection.util.UDRemoteInformationExchanger;
+import de.hhu.bsinfo.neutrino.connection.util.SocketUDInformationExchanger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -144,14 +144,11 @@ public class ConnectionManagerTest implements Callable<Void> {
         var socket = serverSocket.accept();
 
         var unreliableDatagram = StaticConnectionManager.createUnreliableDatagram(deviceId);
-        var remoteInformation = new UDRemoteInformationExchanger(socket, unreliableDatagram).exchangeRemoteInformation();
+        var remoteInformation = new SocketUDInformationExchanger(socket, unreliableDatagram).exchangeInformation();
 
         LOGGER.info("Unreliable datagram created");
 
         var message = new Message(unreliableDatagram.getDeviceContext(), MessageType.REMOTE_BUF_INFO, "2342535:322554:245");
-
-        // Only for test purpose
-        TimeUnit.SECONDS.sleep(1);
 
         unreliableDatagram.send(message.getByteBuffer(), remoteInformation);
 
@@ -170,7 +167,7 @@ public class ConnectionManagerTest implements Callable<Void> {
     public void startClientUD() throws IOException {
         var unreliableDatagram = StaticConnectionManager.createUnreliableDatagram(deviceId);
 
-        var remoteInfo = new UDRemoteInformationExchanger(serverAddress, unreliableDatagram).exchangeRemoteInformation();
+        var remoteInfo = new SocketUDInformationExchanger(serverAddress, unreliableDatagram).exchangeInformation();
 
         LOGGER.info("Unreliable datagram created");
 

@@ -1,8 +1,7 @@
 package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
-import de.hhu.bsinfo.neutrino.connection.util.ConnectionInformation;
-import de.hhu.bsinfo.neutrino.connection.util.UDRemoteInformation;
+import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,11 +42,11 @@ public class UnreliableDatagram extends QPSocket{
         }
     }
 
-    public long send(RegisteredBuffer data, UDRemoteInformation remoteInfo) {
+    public long send(RegisteredBuffer data, UDInformation remoteInfo) {
         return send(data, 0, data.capacity(), remoteInfo);
     }
 
-    public long send(RegisteredBuffer data, long offset, long length, UDRemoteInformation remoteInfo) {
+    public long send(RegisteredBuffer data, long offset, long length, UDInformation remoteInfo) {
         var addressAttributes = new AddressHandle.Attributes.Builder(remoteInfo.getLocalId(), remoteInfo.getPortNumber()).build();
         var addressHandle = getDeviceContext().getProtectionDomain().createAddressHandle(addressAttributes);
 
