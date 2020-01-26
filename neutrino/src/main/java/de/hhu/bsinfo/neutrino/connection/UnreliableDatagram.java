@@ -12,6 +12,9 @@ import java.io.IOException;
 public class UnreliableDatagram extends QPSocket{
     private static final Logger LOGGER = LoggerFactory.getLogger(UnreliableDatagram.class);
 
+    // Offset in Received Buffers (first 40 Bytes are used for MetaInfo)
+    public static final int UD_Receive_Offset = 40;
+
     public UnreliableDatagram(DeviceContext deviceContext) throws IOException {
 
         super(deviceContext);

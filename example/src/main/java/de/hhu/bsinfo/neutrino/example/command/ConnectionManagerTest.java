@@ -4,6 +4,7 @@ package de.hhu.bsinfo.neutrino.example.command;
 import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.connection.ConnectionManager;
 
+import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
 import de.hhu.bsinfo.neutrino.connection.util.UDRemoteInformationExchanger;
@@ -175,7 +176,7 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Unreliable datagram created");
 
-        var buffer = ConnectionManager.allocLocalBuffer(unreliableDatagram.getDeviceContext(), Message.getSize());
+        var buffer = ConnectionManager.allocLocalBuffer(unreliableDatagram.getDeviceContext(), Message.getSize() + UnreliableDatagram.UD_Receive_Offset);
 
         long wrId = unreliableDatagram.receive(buffer);
 
@@ -186,7 +187,7 @@ public class ConnectionManagerTest implements Callable<Void> {
             received = unreliableDatagram.pollReceive(1);
         } while(0 == received);
 
-        var message = new Message(buffer);
+        var message = new Message(buffer, UnreliableDatagram.UD_Receive_Offset);
 
         var string = message.getPayload();
         String[] parts = string.split(":");

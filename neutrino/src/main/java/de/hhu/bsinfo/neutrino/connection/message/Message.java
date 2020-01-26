@@ -40,7 +40,16 @@ public class Message implements NativeObject {
         this.handle = byteBuffer.getHandle();
 
         this.messageType = new NativeInteger(byteBuffer, 0);
-        this.payload = new NativeString(byteBuffer, 4, SIZE - Integer.BYTES);
+        this.payload = new NativeString(byteBuffer, Integer.BYTES, SIZE - Integer.BYTES);
+    }
+
+    public Message(RegisteredBuffer byteBuffer, int offset) {
+        this.byteBuffer = byteBuffer;
+
+        this.handle = byteBuffer.getHandle();
+
+        this.messageType = new NativeInteger(byteBuffer, offset);
+        this.payload = new NativeString(byteBuffer, Integer.BYTES + offset, SIZE - Integer.BYTES);
     }
 
     public void setPayload(String payload) {
