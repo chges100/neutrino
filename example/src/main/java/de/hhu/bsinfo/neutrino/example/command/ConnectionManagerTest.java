@@ -2,7 +2,7 @@ package de.hhu.bsinfo.neutrino.example.command;
 
 
 import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
-import de.hhu.bsinfo.neutrino.connection.ConnectionManager;
+import de.hhu.bsinfo.neutrino.connection.StaticConnectionManager;
 
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
@@ -11,12 +11,10 @@ import de.hhu.bsinfo.neutrino.connection.util.UDRemoteInformationExchanger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
-import sun.misc.Unsafe;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
@@ -88,7 +86,7 @@ public class ConnectionManagerTest implements Callable<Void> {
         var serverSocket = new ServerSocket(port);
         var socket = serverSocket.accept();
 
-        var connection = ConnectionManager.createReliableConnection(deviceId,  socket);
+        var connection = StaticConnectionManager.createReliableConnection(deviceId,  socket);
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
@@ -103,17 +101,17 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Send: {}", message);
 
-        ConnectionManager.closeConnection(connection);
+        StaticConnectionManager.closeConnection(connection);
 
         LOGGER.info("Connection closed");
     }
 
     public void startClientRC() throws IOException {
-        var connection = ConnectionManager.createReliableConnection(deviceId, serverAddress);
+        var connection = StaticConnectionManager.createReliableConnection(deviceId, serverAddress);
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
-        var buffer = ConnectionManager.allocLocalBuffer(connection.getDeviceContext(), Message.getSize());
+        var buffer = StaticConnectionManager.allocLocalBuffer(connection.getDeviceContext(), Message.getSize());
 
         long wrId = connection.receive(buffer);
 
@@ -133,7 +131,7 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Received: {}", bufferInformation);
 
-        ConnectionManager.closeConnection(connection);
+        StaticConnectionManager.closeConnection(connection);
 
         LOGGER.info("Connection closed");
 
@@ -145,8 +143,8 @@ public class ConnectionManagerTest implements Callable<Void> {
         var serverSocket = new ServerSocket(port);
         var socket = serverSocket.accept();
 
-        var unreliableDatagram = ConnectionManager.createUnreliableDatagram(deviceId);
-        var remoteInformation = new UDRemoteInformationExchanger(socket, unreliableDatagram).getRemoteInformation();
+        var unreliableDatagram = StaticConnectionManager.createUnreliableDatagram(deviceId);
+        var remoteInformation = new UDRemoteInformationExchanger(socket, unreliableDatagram).exchangeRemoteInformation();
 
         LOGGER.info("Unreliable datagram created");
 
@@ -164,19 +162,19 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Send: {}", message);
 
-        ConnectionManager.closeUnreliableDatagram(unreliableDatagram);
+        StaticConnectionManager.closeUnreliableDatagram(unreliableDatagram);
 
         LOGGER.info("Unreliable Datagram closed");
     }
 
     public void startClientUD() throws IOException {
-        var unreliableDatagram = ConnectionManager.createUnreliableDatagram(deviceId);
+        var unreliableDatagram = StaticConnectionManager.createUnreliableDatagram(deviceId);
 
-        var remoteInfo = new UDRemoteInformationExchanger(serverAddress, unreliableDatagram).getRemoteInformation();
+        var remoteInfo = new UDRemoteInformationExchanger(serverAddress, unreliableDatagram).exchangeRemoteInformation();
 
         LOGGER.info("Unreliable datagram created");
 
-        var buffer = ConnectionManager.allocLocalBuffer(unreliableDatagram.getDeviceContext(), Message.getSize() + UnreliableDatagram.UD_Receive_Offset);
+        var buffer = StaticConnectionManager.allocLocalBuffer(unreliableDatagram.getDeviceContext(), Message.getSize() + UnreliableDatagram.UD_Receive_Offset);
 
         long wrId = unreliableDatagram.receive(buffer);
 
@@ -198,7 +196,7 @@ public class ConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Received: {}", bufferInformation);
 
-        ConnectionManager.closeUnreliableDatagram(unreliableDatagram);
+        StaticConnectionManager.closeUnreliableDatagram(unreliableDatagram);
 
         LOGGER.info("Unreliable Datagram closed");
 

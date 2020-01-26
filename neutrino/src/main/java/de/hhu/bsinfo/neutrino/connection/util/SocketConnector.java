@@ -1,6 +1,5 @@
-package de.hhu.bsinfo.neutrino.connection.connector;
+package de.hhu.bsinfo.neutrino.connection.util;
 
-import de.hhu.bsinfo.neutrino.connection.util.ConnectionInformation;
 import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Connector;
 import org.slf4j.Logger;

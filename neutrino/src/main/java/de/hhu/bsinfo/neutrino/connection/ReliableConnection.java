@@ -29,7 +29,7 @@ public class ReliableConnection extends QPSocket implements Connectable, Executo
             throw new IOException("Cannot create queue pair");
         }
 
-        connectionId = ConnectionManager.provideConnectionId();
+        connectionId = StaticConnectionManager.provideConnectionId();
     }
 
     @Override

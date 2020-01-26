@@ -1,10 +1,9 @@
 package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
-import de.hhu.bsinfo.neutrino.connection.connector.SocketConnector;
+import de.hhu.bsinfo.neutrino.connection.util.SocketConnector;
 import de.hhu.bsinfo.neutrino.verbs.AccessFlag;
 import de.hhu.bsinfo.neutrino.verbs.Context;
-import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,9 +15,9 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class ConnectionManager {
+public class StaticConnectionManager {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionManager.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(StaticConnectionManager.class);
 
     private static final ArrayList<DeviceContext> deviceContexts;
     private static final Deque<RegisteredBuffer> localBuffers;

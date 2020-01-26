@@ -1,8 +1,6 @@
 package de.hhu.bsinfo.neutrino.connection.util;
 
-import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
-import de.hhu.bsinfo.neutrino.connection.connector.SocketConnector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +25,7 @@ public class UDRemoteInformationExchanger {
         this.unreliableDatagram = unreliableDatagram;
     }
 
-    public UDRemoteInformation getRemoteInformation() throws IOException {
+    public UDRemoteInformation exchangeRemoteInformation() throws IOException {
         var localInfo = new UDRemoteInformation((byte) 1, unreliableDatagram.getPortAttributes().getLocalId(), unreliableDatagram.getQueuePair().getQueuePairNumber(), unreliableDatagram.getQueuePair().queryAttributes().getQkey());
 
         LOGGER.info("Local connection information: {}", localInfo);
