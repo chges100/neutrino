@@ -38,7 +38,7 @@ public class SocketUDInformationExchanger implements InformationExchanger<UDInfo
 
         LOGGER.info("Waiting for remote connection information");
 
-        var byteBuffer = ByteBuffer.wrap(socket.getInputStream().readNBytes(Byte.BYTES + Short.BYTES + Integer.BYTES + Integer.BYTES));
+        var byteBuffer = ByteBuffer.wrap(socket.getInputStream().readNBytes(UDInformation.SIZE));
         var remoteInfo = new UDInformation(byteBuffer);
 
         LOGGER.info("Received remote information: {}", remoteInfo);
@@ -54,7 +54,7 @@ public class SocketUDInformationExchanger implements InformationExchanger<UDInfo
 
         LOGGER.info("Local connection information: {}", localInfo);
 
-        socket.getOutputStream().write(ByteBuffer.allocate(Byte.BYTES + Short.BYTES + Integer.BYTES + Integer.BYTES)
+        socket.getOutputStream().write(ByteBuffer.allocate(UDInformation.SIZE)
                 .put(localInfo.getPortNumber())
                 .putShort(localInfo.getLocalId())
                 .putInt(localInfo.getQueuePairNumber())

@@ -1,12 +1,14 @@
 package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
+import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.StringJoiner;
 
 public class UnreliableDatagram extends QPSocket{
     private static final Logger LOGGER = LoggerFactory.getLogger(UnreliableDatagram.class);
@@ -121,5 +123,14 @@ public class UnreliableDatagram extends QPSocket{
     @Override
     public void close() {
         queuePair.close();
+    }
+
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", UnreliableDatagram.class.getSimpleName() + "[", "]")
+                .add("localId=" + portAttributes.getLocalId())
+                .add("portNumber=" + 1)
+                .add("queuePairNumber=" + queuePair.getQueuePairNumber())
+                .toString();
     }
 }

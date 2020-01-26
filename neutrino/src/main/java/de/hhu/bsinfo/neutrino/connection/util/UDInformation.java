@@ -10,6 +10,8 @@ public class UDInformation {
     private final int queuePairNumber;
     private final int queuePairKey;
 
+    public static final int SIZE = Byte.BYTES + Short.BYTES + Integer.BYTES + Integer.BYTES;
+
     public UDInformation(byte portNumber, short localId, int queuePairNumber, int queuePairKey) {
         this.portNumber = portNumber;
         this.localId = localId;
@@ -42,7 +44,7 @@ public class UDInformation {
 
     @Override
     public String toString() {
-        return new StringJoiner(", ", RCInformation.class.getSimpleName() + "[", "]")
+        return new StringJoiner(", ", UDInformation.class.getSimpleName() + "[", "]")
                 .add("portNumber=" + portNumber)
                 .add("localId=" + localId)
                 .add("queuePairNumber=" + queuePairNumber)

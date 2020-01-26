@@ -7,7 +7,7 @@ import picocli.CommandLine;
     name = "neutrino",
     description = "",
     subcommands = { DeviceInfo.class, MessagingTest.class, RdmaTest.class, WindowTest.class,
-            ExtendedDeviceInfo.class, ExtendedMessagingTest.class, ExtendedRdmaTest.class, Demo.class, ConnectionManagerTest.class, DcMessagingTest.class}
+            ExtendedDeviceInfo.class, ExtendedMessagingTest.class, ExtendedRdmaTest.class, Demo.class, StaticConnectionManagerTest.class, DynamicConnectionManagerTest.class, DcMessagingTest.class}
 )
 public class Root implements Runnable {
 

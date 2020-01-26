@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ReliableConnection extends QPSocket implements Connectable<RCInformation>, Executor {
@@ -157,5 +158,14 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
     public QueuePair getQueuePair() {
         return queuePair;
+    }
+
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", UnreliableDatagram.class.getSimpleName() + "[", "]")
+                .add("localId=" + portAttributes.getLocalId())
+                .add("portNumber=" + 1)
+                .add("queuePairNumber=" + queuePair.getQueuePairNumber())
+                .toString();
     }
 }

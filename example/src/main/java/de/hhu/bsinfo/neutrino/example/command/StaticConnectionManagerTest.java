@@ -16,16 +16,15 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
 
 @CommandLine.Command(
-        name = "con-mgr-test",
+        name = "stat-con-test",
         description = "Starts a simple test to see if the connection manager works properly.%n",
         showDefaultValues = true,
         separator = " ")
-public class ConnectionManagerTest implements Callable<Void> {
+public class StaticConnectionManagerTest implements Callable<Void> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionManagerTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(StaticConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
     private static final int DEFAULTBUFSIZE = 64;

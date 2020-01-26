@@ -40,7 +40,7 @@ public class SocketRCInformationExchanger implements Connector, InformationExcha
     public RCInformation getRemoteInformation() throws IOException {
         LOGGER.info("Waiting for remote connection information");
 
-        var byteBuffer = ByteBuffer.wrap(socket.getInputStream().readNBytes(Byte.BYTES + Short.BYTES + Integer.BYTES));
+        var byteBuffer = ByteBuffer.wrap(socket.getInputStream().readNBytes(RCInformation.SIZE));
         var remoteInfo = new RCInformation(byteBuffer);
 
         LOGGER.info("Received connection information: {}", remoteInfo);
@@ -56,7 +56,7 @@ public class SocketRCInformationExchanger implements Connector, InformationExcha
 
         LOGGER.info("Local connection information: {}", localInfo);
 
-        socket.getOutputStream().write(ByteBuffer.allocate(Byte.BYTES + Short.BYTES + Integer.BYTES)
+        socket.getOutputStream().write(ByteBuffer.allocate(RCInformation.SIZE)
                 .put(localInfo.getPortNumber())
                 .putShort(localInfo.getLocalId())
                 .putInt(localInfo.getQueuePairNumber())
@@ -65,7 +65,8 @@ public class SocketRCInformationExchanger implements Connector, InformationExcha
 
     @Override
     public void connect() throws IOException {
-        connection.connect(exchangeInformation());
+        sendLocalInformation();
+        connection.connect(getRemoteInformation());
     }
 
 }
