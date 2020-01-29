@@ -9,7 +9,7 @@ public class RCInformation {
     private final short localId;
     private final int queuePairNumber;
 
-    public static final int SIZE = Byte.BYTES + Short.BYTES + Integer.BYTES + Integer.BYTES;
+    public static final int SIZE = Byte.BYTES + Short.BYTES + Integer.BYTES;
 
     public RCInformation(byte portNumber, short localId, int queuePairNumber) {
         this.portNumber = portNumber;

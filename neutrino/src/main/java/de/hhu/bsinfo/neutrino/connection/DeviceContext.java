@@ -1,5 +1,7 @@
 package de.hhu.bsinfo.neutrino.connection;
 
+import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
+import de.hhu.bsinfo.neutrino.verbs.AccessFlag;
 import de.hhu.bsinfo.neutrino.verbs.Context;
 import de.hhu.bsinfo.neutrino.verbs.DeviceAttributes;
 import de.hhu.bsinfo.neutrino.verbs.ProtectionDomain;
@@ -39,6 +41,17 @@ public class DeviceContext {
         LOGGER.info("Query device attributes");
 
         deviceAttributes = context.queryDevice();
+    }
+
+    public RegisteredBuffer allocLocalBuffer(long size) {
+        LOGGER.info("Allocate new memory region for device {} of size {}", deviceId, size);
+
+        return protectionDomain.allocateMemory(size, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE, AccessFlag.MW_BIND);
+    }
+
+    public void freeLocalBuffer(RegisteredBuffer buffer) {
+        LOGGER.info("Free memory region");
+        buffer.close();
     }
 
     public ProtectionDomain getProtectionDomain() {

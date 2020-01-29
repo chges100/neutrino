@@ -5,6 +5,7 @@ import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.connection.StaticConnectionManager;
 
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
+import de.hhu.bsinfo.neutrino.connection.message.LocalMessage;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
 import de.hhu.bsinfo.neutrino.connection.util.SocketUDInformationExchanger;
@@ -89,7 +90,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
-        var message = new Message(connection.getDeviceContext(), MessageType.REMOTE_BUF_INFO, "2342535:322554:245");
+        var message = new Message(connection.getDeviceContext(), MessageType.COMMON, "2342535:322554:245");
 
         connection.send(message.getByteBuffer());
 
@@ -110,7 +111,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Connection {} created", connection.getConnectionId());
 
-        var buffer = StaticConnectionManager.allocLocalBuffer(connection.getDeviceContext(), Message.getSize());
+        var buffer = connection.getDeviceContext().allocLocalBuffer(Message.getSize());
 
         long wrId = connection.receive(buffer);
 
@@ -147,7 +148,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Unreliable datagram created");
 
-        var message = new Message(unreliableDatagram.getDeviceContext(), MessageType.REMOTE_BUF_INFO, "2342535:322554:245");
+        var message = new Message(unreliableDatagram.getDeviceContext(), MessageType.COMMON, "2342535:322554:245");
 
         unreliableDatagram.send(message.getByteBuffer(), remoteInformation);
 
@@ -170,7 +171,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Unreliable datagram created");
 
-        var buffer = StaticConnectionManager.allocLocalBuffer(unreliableDatagram.getDeviceContext(), Message.getSize() + UnreliableDatagram.UD_Receive_Offset);
+        var buffer = unreliableDatagram.getDeviceContext().allocLocalBuffer(Message.getSize() + UnreliableDatagram.UD_Receive_Offset);
 
         long wrId = unreliableDatagram.receive(buffer);
 
@@ -181,7 +182,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
             received = unreliableDatagram.pollReceive(1);
         } while(0 == received);
 
-        var message = new Message(buffer, UnreliableDatagram.UD_Receive_Offset);
+        var message = new LocalMessage(buffer, UnreliableDatagram.UD_Receive_Offset);
 
         var string = message.getPayload();
         String[] parts = string.split(":");

@@ -72,9 +72,13 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var sendWorkRequest = new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, scatterGatherElement).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(wrIdProvider.getAndIncrement()).build();
+        var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, sendWrIdProvider.getAndIncrement());
 
         return postSend(sendWorkRequest);
+    }
+
+    protected SendWorkRequest buildSendWorkRequest(ScatterGatherElement sge, int id) {
+        return new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, sge).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(id).build();
     }
 
     @Override
@@ -84,9 +88,13 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var sendWorkRequest = new SendWorkRequest.RdmaBuilder(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(wrIdProvider.getAndIncrement()).build();
+        var sendWorkRequest = buildRDMAWorkRequest(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey, sendWrIdProvider.getAndIncrement());
 
         return postSend(sendWorkRequest);
+    }
+
+    protected SendWorkRequest buildRDMAWorkRequest(SendWorkRequest.OpCode opCode, ScatterGatherElement sge, long remoteAddress, int remoteKey, int id) {
+        return new SendWorkRequest.RdmaBuilder(opCode, sge, remoteAddress, remoteKey).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(id).build();
     }
 
     public long receive(RegisteredBuffer data) {
@@ -99,9 +107,12 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var receiveWorkRequest = new ReceiveWorkRequest.Builder().withScatterGatherElement(scatterGatherElement).withId(wrIdProvider.getAndIncrement()).build();
-
+        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, receiveWrIdProvider.getAndIncrement());
         return postReceive(receiveWorkRequest);
+    }
+
+    protected ReceiveWorkRequest buildReceiveWorkRequest(ScatterGatherElement sge, int id) {
+        return new ReceiveWorkRequest.Builder().withScatterGatherElement(sge).withId(id).build();
     }
 
     private CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {

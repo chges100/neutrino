@@ -22,7 +22,8 @@ public abstract class QPSocket {
 
     protected QueuePair queuePair;
 
-    protected final AtomicInteger wrIdProvider;
+    protected final AtomicInteger sendWrIdProvider;
+    protected final AtomicInteger receiveWrIdProvider;
 
     protected QPSocket(DeviceContext deviceContext) throws IOException {
 
@@ -43,7 +44,8 @@ public abstract class QPSocket {
             throw new IOException("Cannot create completion queue");
         }
 
-        wrIdProvider = new AtomicInteger(0);
+        sendWrIdProvider = new AtomicInteger(0);
+        receiveWrIdProvider = new AtomicInteger(0);
     }
 
     abstract void init() throws IOException;

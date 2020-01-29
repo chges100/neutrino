@@ -20,7 +20,6 @@ public class StaticConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(StaticConnectionManager.class);
 
     private static final ArrayList<DeviceContext> deviceContexts;
-    private static final Deque<RegisteredBuffer> localBuffers;
     private static final ArrayList<ReliableConnection> connections;
     private static final ArrayList<UnreliableDatagram> unreliableDatagrams;
 
@@ -29,7 +28,6 @@ public class StaticConnectionManager {
     static {
         var deviceCnt = Context.getDeviceCount();
         deviceContexts = new ArrayList<>();
-        localBuffers = new LinkedList<>();
         connections = new ArrayList<>();
         unreliableDatagrams = new ArrayList<>();
 
@@ -43,25 +41,6 @@ public class StaticConnectionManager {
             LOGGER.error("Could not initialize InfiniBand devices");
         }
 
-    }
-
-    public static RegisteredBuffer allocLocalBuffer(DeviceContext deviceContext, long size) {
-        LOGGER.info("Allocate new memory region for device {} of size {}", deviceContext.getDeviceId(), size);
-
-        var buffer = deviceContext.getProtectionDomain().allocateMemory(size, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE, AccessFlag.MW_BIND);
-        localBuffers.add(buffer);
-
-        return buffer;
-    }
-
-    public static RegisteredBuffer allocLocalBuffer(int deviceId, long size) {
-        return allocLocalBuffer(deviceContexts.get(deviceId), size);
-    }
-
-    public static void freeLocalBuffer(RegisteredBuffer buffer) {
-        LOGGER.info("Free memory region");
-        localBuffers.remove(buffer);
-        buffer.close();
     }
 
     public static ReliableConnection createReliableConnection(int deviceId, Socket socket) throws IOException {
