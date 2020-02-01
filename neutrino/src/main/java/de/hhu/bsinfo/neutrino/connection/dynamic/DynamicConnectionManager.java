@@ -1,6 +1,8 @@
 package de.hhu.bsinfo.neutrino.connection.dynamic;
 
+import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.buffer.LocalBuffer;
+import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
@@ -33,6 +35,8 @@ import java.util.spi.AbstractResourceBundleProvider;
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
+    private static final long BUFFER_SIZE = 1024*1024;
+
     private final ArrayList<DeviceContext> deviceContexts;
 
     private final DynamicConnectionHandler dynamicConnectionHandler;
@@ -41,11 +45,12 @@ public class DynamicConnectionManager {
     private final HashMap<Short, UDInformation> remoteHandlerInfos;
     private final HashMap<Short, RCInformation> remoteConnectionInfos;
     private final HashMap<Short, ReliableConnection> connections;
+    private final HashMap<Short, BufferInformation> remoteBuffers;
+    private final HashMap<Short, BufferInformation> localBuffers;
 
     private final UDInformationPropagator udPropagator;
     private final UDInformationReceiver udReceiver;
 
-    private final AtomicInteger idCounter = new AtomicInteger();
     private final int UDPPort;
 
     private final ThreadPoolExecutor executor;
@@ -58,6 +63,8 @@ public class DynamicConnectionManager {
         remoteHandlerInfos = new HashMap<>();
         remoteConnectionInfos = new HashMap<>();
         connections = new HashMap<>();
+        remoteBuffers = new HashMap<>();
+        localBuffers = new HashMap<>();
 
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
@@ -87,8 +94,42 @@ public class DynamicConnectionManager {
         udPropagator.start();
     }
 
-    public int provideConnectionId() {
-        return idCounter.getAndIncrement();
+    public void remoteWrite(RegisteredBuffer data, long offset, long length, short remoteLocalId) {
+        if(!connections.containsKey(remoteLocalId)) {
+            createConnection(remoteLocalId);
+        }
+
+        var connection = connections.get(remoteLocalId);
+
+        if(remoteBuffers.containsKey(remoteLocalId)) {
+            var remoteBufferInfo = remoteBuffers.get(remoteLocalId);
+            connection.execute(data, SendWorkRequest.OpCode.RDMA_WRITE, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
+        } else {
+            LOGGER.error("No remote buffer registered for RDMA operation on {}", remoteLocalId);
+        }
+    }
+
+    public void createConnection(short remoteLocalId) {
+        try {
+            var connection = new ReliableConnection(deviceContexts.get(0));
+            connection.init();
+            connections.put(remoteLocalId, connection);
+
+            var localQP = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
+            dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
+
+            if (!localBuffers.containsKey(remoteLocalId)) {
+                var buffer = deviceContexts.get(0).allocLocalBuffer(BUFFER_SIZE);
+                var bufferInfo = new BufferInformation(buffer);
+
+                localBuffers.put(remoteLocalId, bufferInfo);
+
+                dynamicConnectionHandler.sendBufferInfo(bufferInfo, connection.getPortAttributes().getLocalId(), remoteLocalId);
+            }
+
+        } catch (Exception e) {
+            LOGGER.info("Could not create connection to {}", remoteLocalId);
+        }
     }
 
     public void shutdown() {
@@ -249,6 +290,14 @@ public class DynamicConnectionManager {
             sendMessage(MessageType.CONNECTION_ACK, localQP.getPortNumber() + ":" + localQP.getLocalId() + ":" + localQP.getQueuePairNumber(), remoteInfo);
         }
 
+        public void sendConnectionRequest(RCInformation localQP, short remoteLocalId) {
+            sendMessage(MessageType.CONNECTION_REQUEST, localQP.getPortNumber() + ":" + localQP.getLocalId() + ":" + localQP.getQueuePairNumber(), remoteHandlerInfos.get(remoteLocalId));
+        }
+
+        public void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
+            sendMessage(MessageType.BUFFER_INFO, localId + ":" + bufferInformation.getAddress() + ":" + bufferInformation.getCapacity() + ":" + bufferInformation.getRemoteKey(), remoteHandlerInfos.get(remoteLocalId));
+        }
+
         public void sendMessage(MessageType msgType, String payload, UDInformation remoteInfo) {
             var sge = sendSGEProvider.getSGE();
             if(sge == null) {
@@ -367,6 +416,9 @@ public class DynamicConnectionManager {
                     handleConnectionRequest();
                     break;
                 case CONNECTION_ACK:
+                    handleConnectionAck();
+                    break;
+                case BUFFER_INFO:
                     break;
                 default:
                     LOGGER.info("Got message {}", payload);
@@ -382,28 +434,63 @@ public class DynamicConnectionManager {
 
             LOGGER.info("Got new connection request from {}", remoteInfo);
 
+            RCInformation localQPInfo;
+
             if(connections.containsKey(remoteInfo.getLocalId())) {
                 var connection = connections.get(remoteInfo.getLocalId());
 
-                var localQPInfo = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
+                localQPInfo = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
 
                 dynamicConnectionHandler.answerConnectionRequest(localQPInfo, remoteHandlerInfos.get(remoteInfo.getLocalId()));
+
             } else {
                 try {
                     var connection = new ReliableConnection(deviceContexts.get(0));
+                    connection.init();
 
-                    var localQPInfo = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
+                    localQPInfo = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
 
                     dynamicConnectionHandler.answerConnectionRequest(localQPInfo, remoteHandlerInfos.get(remoteInfo.getLocalId()));
 
+                    connection.connect(remoteInfo);
+
                     connections.put(remoteInfo.getLocalId(), connection);
+
+                    if (!localBuffers.containsKey(remoteInfo.getLocalId())) {
+                        var buffer = deviceContexts.get(0).allocLocalBuffer(BUFFER_SIZE);
+                        var bufferInfo = new BufferInformation(buffer);
+
+                        localBuffers.put(remoteInfo.getLocalId(), bufferInfo);
+
+                        dynamicConnectionHandler.sendBufferInfo(bufferInfo, connection.getPortAttributes().getLocalId(), remoteInfo.getLocalId());
+                    }
                 } catch (Exception e) {
                     LOGGER.error("Could not create connection to {}", remoteInfo);
                 }
-
-
-
             }
+        }
+
+        private void handleConnectionAck() {
+            var split = payload.split(":");
+            var remoteInfo = new RCInformation(Byte.parseByte(split[0]), Short.parseShort(split[1]), Integer.parseInt(split[2]));
+
+            LOGGER.info("Got new connection ack from {}", remoteInfo);
+
+            var connection = connections.get(remoteInfo.getLocalId());
+
+            try {
+                connection.connect(remoteInfo);
+            } catch (Exception e) {
+                LOGGER.error("Could not connect to {}", remoteInfo);
+            }
+
+        }
+
+        private void handleBufferInfo() {
+            var split = payload.split(":");
+            var bufferInfo = new BufferInformation(Long.parseLong(split[1]), Long.parseLong(split[2]), Integer.parseInt(split[3]));
+
+            remoteBuffers.put(Short.parseShort(split[0]), bufferInfo);
         }
     }
 }

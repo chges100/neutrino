@@ -20,6 +20,12 @@ public class BufferInformation {
         remoteKey = buffer.getInt();
     }
 
+    public BufferInformation(RegisteredBuffer buffer) {
+        address = buffer.getHandle();
+        capacity = buffer.capacity();
+        remoteKey = buffer.getRemoteKey();
+    }
+
     public long getAddress() {
         return address;
     }
