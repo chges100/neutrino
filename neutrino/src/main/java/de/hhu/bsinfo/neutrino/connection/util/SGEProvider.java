@@ -27,7 +27,7 @@ public class SGEProvider {
         for(int i = 0; i < cnt; i++) {
             var sge = new ScatterGatherElement(buffer.getHandle() + (long) i * bufferSize, bufferSize, buffer.getLocalKey());
             scatterGatherElements.add(sge);
-            NativeObjectRegistry.getObject(sge.getHandle());
+            NativeObjectRegistry.registerObject(sge);
         }
     }
 

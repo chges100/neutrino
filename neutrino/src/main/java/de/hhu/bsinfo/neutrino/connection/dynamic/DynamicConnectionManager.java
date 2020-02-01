@@ -98,13 +98,32 @@ public class DynamicConnectionManager {
         udReceiver.shutdown();
 
         dynamicConnectionHandler.close();
+
+        printRemoteDCHInfos();
+        printRemoteRCInfos();
     }
 
-    public void printRemoteInfos() {
-        LOGGER.info("Print out remote handler information:");
+    public void printRemoteDCHInfos() {
+        String out = "Print out remote dynamic connection handler information:\n";
+
         for(var remoteInfo : remoteHandlerInfos.values()) {
-            LOGGER.info("{}", remoteInfo);
+            out += remoteInfo;
+            out += "\n";
         }
+
+        LOGGER.info(out);
+    }
+
+    public void printRemoteRCInfos() {
+        String out = "Print out reliable connection information:\n";
+
+        for(var remoteInfo : connections.values()) {
+            out += remoteInfo;
+            out += "\n";
+        }
+
+        LOGGER.info(out);
+
     }
 
     private class UDInformationReceiver extends Thread {
@@ -262,6 +281,12 @@ public class DynamicConnectionManager {
             postReceive(workRequest);
         }
 
+        @Override
+        public void close() {
+            cqpt.shutdown();
+            queuePair.close();
+        }
+
         private class CompletionQueuePollThread extends Thread {
 
             private boolean isRunning = true;
@@ -311,14 +336,11 @@ public class DynamicConnectionManager {
                         receiveSGEProvider.returnSGE(sge);
                     }
 
-                    boolean firstTestRun = true;
-                    if(firstTestRun) {
-                        for(Map.Entry<Short, UDInformation> entry : remoteHandlerInfos.entrySet()) {
-                            dynamicConnectionHandler.sendMessage(MessageType.COMMON, "Hello from " + getPortAttributes().getLocalId(), entry.getValue());
-                        }
+                    // Fill up receive queue of dch
+                    while (receiveQueueFillCount.get() < receiveQueueSize) {
+                        receiveMessage();
+                        receiveQueueFillCount.incrementAndGet();
                     }
-
-
                 }
 
             }

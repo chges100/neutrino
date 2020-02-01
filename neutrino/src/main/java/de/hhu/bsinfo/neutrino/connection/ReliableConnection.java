@@ -11,12 +11,14 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ReliableConnection extends QPSocket implements Connectable<RCInformation>, Executor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
 
-    private final int connectionId;
+    private static final AtomicInteger idCounter = new AtomicInteger(0);
+    private final int id;
 
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
 
@@ -24,13 +26,14 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         super(deviceContext);
 
+        id = idCounter.getAndIncrement();
+        LOGGER.info("Create reliable connection with id {}", id);
+
         queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
                 QueuePair.Type.RC, sendCompletionQueue, receiveCompletionQueue, sendQueueSize, receiveQueueSize, 1, 1).build());
         if(queuePair == null) {
             throw new IOException("Cannot create queue pair");
         }
-
-        connectionId = StaticConnectionManager.provideConnectionId();
     }
 
     @Override
@@ -160,11 +163,12 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
     @Override
     public void close() throws IOException {
+        LOGGER.info("Close reliable connection {}", id);
         queuePair.close();
     }
 
-    public int getConnectionId() {
-        return connectionId;
+    public int getId() {
+        return id;
     }
 
     public QueuePair getQueuePair() {
@@ -174,6 +178,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     @Override
     public String toString() {
         return new StringJoiner(", ", UnreliableDatagram.class.getSimpleName() + "[", "]")
+                .add("RC id=" + id)
                 .add("localId=" + portAttributes.getLocalId())
                 .add("portNumber=" + 1)
                 .add("queuePairNumber=" + queuePair.getQueuePairNumber())

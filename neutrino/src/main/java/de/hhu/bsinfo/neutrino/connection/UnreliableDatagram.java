@@ -9,9 +9,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.StringJoiner;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class UnreliableDatagram extends QPSocket{
     private static final Logger LOGGER = LoggerFactory.getLogger(UnreliableDatagram.class);
+
+    private static final AtomicInteger idCounter = new AtomicInteger(0);
+    private final int id;
 
     // Offset in Received Buffers (first 40 Bytes are used for MetaInfo)
     public static final int UD_Receive_Offset = 40;
@@ -19,6 +23,10 @@ public class UnreliableDatagram extends QPSocket{
     public UnreliableDatagram(DeviceContext deviceContext) throws IOException {
 
         super(deviceContext);
+
+        id = idCounter.getAndIncrement();
+
+        LOGGER.info("Create new unreliable datagram with id {}", id);
 
         queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
                 QueuePair.Type.UD, sendCompletionQueue, receiveCompletionQueue, sendQueueSize, receiveQueueSize, 1, 1).build());
@@ -130,14 +138,20 @@ public class UnreliableDatagram extends QPSocket{
         return completionArray.getLength();
     }
 
+    public int getId() {
+        return id;
+    }
+
     @Override
     public void close() {
+        LOGGER.info("Close unreliable datagram {}", id);
         queuePair.close();
     }
 
     @Override
     public String toString() {
         return new StringJoiner(", ", UnreliableDatagram.class.getSimpleName() + "[", "]")
+                .add("UD id=" + id)
                 .add("localId=" + portAttributes.getLocalId())
                 .add("portNumber=" + 1)
                 .add("queuePairNumber=" + queuePair.getQueuePairNumber())

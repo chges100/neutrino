@@ -88,7 +88,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         var connection = StaticConnectionManager.createReliableConnection(deviceId,  socket);
 
-        LOGGER.info("Connection {} created", connection.getConnectionId());
+        LOGGER.info("Connection {} created", connection.getId());
 
         var message = new Message(connection.getDeviceContext(), MessageType.COMMON, "2342535:322554:245");
 
@@ -109,7 +109,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
     public void startClientRC() throws IOException {
         var connection = StaticConnectionManager.createReliableConnection(deviceId, serverAddress);
 
-        LOGGER.info("Connection {} created", connection.getConnectionId());
+        LOGGER.info("Connection {} created", connection.getId());
 
         var buffer = connection.getDeviceContext().allocLocalBuffer(Message.getSize());
 

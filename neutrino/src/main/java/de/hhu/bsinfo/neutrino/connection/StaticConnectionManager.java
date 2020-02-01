@@ -1,8 +1,6 @@
 package de.hhu.bsinfo.neutrino.connection;
 
-import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.util.SocketRCInformationExchanger;
-import de.hhu.bsinfo.neutrino.verbs.AccessFlag;
 import de.hhu.bsinfo.neutrino.verbs.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,8 +9,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class StaticConnectionManager {
@@ -22,8 +18,6 @@ public class StaticConnectionManager {
     private static final ArrayList<DeviceContext> deviceContexts;
     private static final ArrayList<ReliableConnection> connections;
     private static final ArrayList<UnreliableDatagram> unreliableDatagrams;
-
-    private static final AtomicInteger idCounter = new AtomicInteger();
 
     static {
         var deviceCnt = Context.getDeviceCount();
@@ -73,7 +67,7 @@ public class StaticConnectionManager {
         var connection = new ReliableConnection(deviceContext);
         connections.add(connection);
 
-        LOGGER.info("Create new reliable connection {}", connection.getConnectionId());
+        LOGGER.info("Create new reliable connection {}", connection.getId());
 
         connection.init();
 
@@ -94,7 +88,7 @@ public class StaticConnectionManager {
     }
 
     public static void closeConnection(ReliableConnection connection) throws IOException {
-        LOGGER.info("Close connection {}", connection.getConnectionId());
+        LOGGER.info("Close connection {}", connection.getId());
         connection.close();
         connections.remove(connection);
     }
@@ -103,9 +97,5 @@ public class StaticConnectionManager {
         LOGGER.info("Close Unreliable Datagram");
         unreliableDatagram.close();
         unreliableDatagrams.remove(unreliableDatagram);
-    }
-
-    public static int provideConnectionId() {
-        return idCounter.getAndIncrement();
     }
 }

@@ -49,8 +49,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         manager.shutdown();
 
-        manager.printRemoteInfos();
-
         return null;
 
     }
