@@ -12,6 +12,7 @@ import de.hhu.bsinfo.neutrino.connection.message.MessageType;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.connection.util.SGEProvider;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
+import de.hhu.bsinfo.neutrino.data.NativeString;
 import de.hhu.bsinfo.neutrino.util.NativeObjectRegistry;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
@@ -24,18 +25,17 @@ import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
-import java.util.spi.AbstractResourceBundleProvider;
 
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
     private static final long BUFFER_SIZE = 1024*1024;
+
+    private final short localId;
 
     private final ArrayList<DeviceContext> deviceContexts;
 
@@ -58,7 +58,6 @@ public class DynamicConnectionManager {
     public DynamicConnectionManager(int port) throws IOException {
         LOGGER.info("Initialize dynamic connection handler");
 
-        var deviceCnt = Context.getDeviceCount();
         deviceContexts = new ArrayList<>();
         remoteHandlerInfos = new HashMap<>();
         remoteConnectionInfos = new HashMap<>();
@@ -68,10 +67,14 @@ public class DynamicConnectionManager {
 
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
+        var deviceCnt = Context.getDeviceCount();
+
         for (int i = 0; i < deviceCnt; i++) {
             var deviceContext = new DeviceContext(i);
             deviceContexts.add(deviceContext);
         }
+
+        localId = deviceContexts.get(0).getContext().queryPort().getLocalId();
 
         if(deviceContexts.isEmpty()) {
             throw new IOException("Could not initialize any Infiniband device");
@@ -94,7 +97,27 @@ public class DynamicConnectionManager {
         udPropagator.start();
     }
 
+    public void remoteWriteToAll(RegisteredBuffer data, long offset, long length) {
+        for(var remoteLocalId : remoteHandlerInfos.keySet()){
+            remoteWrite(data, offset, length, remoteLocalId);
+        }
+    }
+
+    public void remoteReadFromAll(RegisteredBuffer data, long offset, long length) {
+        for(var remoteLocalId : remoteHandlerInfos.keySet()){
+            remoteRead(data, offset, length, remoteLocalId);
+        }
+    }
+
     public void remoteWrite(RegisteredBuffer data, long offset, long length, short remoteLocalId) {
+        remoteExecute(SendWorkRequest.OpCode.RDMA_WRITE, data, offset, length, remoteLocalId);
+    }
+
+    public void remoteRead(RegisteredBuffer data, long offset, long length, short remoteLocalId) {
+        remoteExecute(SendWorkRequest.OpCode.RDMA_READ, data, offset, length, remoteLocalId);
+    }
+
+    private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, short remoteLocalId) {
         if(!connections.containsKey(remoteLocalId)) {
             createConnection(remoteLocalId);
         }
@@ -103,7 +126,7 @@ public class DynamicConnectionManager {
 
         if(remoteBuffers.containsKey(remoteLocalId)) {
             var remoteBufferInfo = remoteBuffers.get(remoteLocalId);
-            connection.execute(data, SendWorkRequest.OpCode.RDMA_WRITE, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
+            connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
         } else {
             LOGGER.error("No remote buffer registered for RDMA operation on {}", remoteLocalId);
         }
@@ -119,7 +142,7 @@ public class DynamicConnectionManager {
             dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
 
             if (!localBuffers.containsKey(remoteLocalId)) {
-                var buffer = deviceContexts.get(0).allocLocalBuffer(BUFFER_SIZE);
+                var buffer = deviceContexts.get(0).allocRegisteredBuffer(BUFFER_SIZE);
                 var bufferInfo = new BufferInformation(buffer);
 
                 localBuffers.put(remoteLocalId, bufferInfo);
@@ -132,6 +155,10 @@ public class DynamicConnectionManager {
         }
     }
 
+    public RegisteredBuffer allocRegisteredBuffer(int deviceId, long size) {
+        return deviceContexts.get(deviceId).allocRegisteredBuffer(size);
+    }
+
     public void shutdown() {
         LOGGER.info("Shutdown dynamic connection manager");
 
@@ -142,6 +169,11 @@ public class DynamicConnectionManager {
 
         printRemoteDCHInfos();
         printRemoteRCInfos();
+        printLocalBufferInfos();
+    }
+
+    public short getLocalId() {
+        return localId;
     }
 
     public void printRemoteDCHInfos() {
@@ -165,6 +197,22 @@ public class DynamicConnectionManager {
 
         LOGGER.info(out);
 
+    }
+
+    public void printLocalBufferInfos() {
+        String out = "Content of local connection RDMA buffers:\n";
+
+        for(var bufferInfo : localBuffers.entrySet()) {
+            var buffer = LocalBuffer.wrap(bufferInfo.getValue().getAddress(), bufferInfo.getValue().getCapacity());
+
+            out += "Buffer for remote " + bufferInfo.getKey() + ": ";
+
+            var tmp = new NativeString(buffer, 0, 24);
+
+            out += tmp.get() + "\n";
+        }
+
+        LOGGER.info(out);
     }
 
     private class UDInformationReceiver extends Thread {
@@ -419,6 +467,7 @@ public class DynamicConnectionManager {
                     handleConnectionAck();
                     break;
                 case BUFFER_INFO:
+                    handleBufferInfo();
                     break;
                 default:
                     LOGGER.info("Got message {}", payload);
@@ -457,7 +506,7 @@ public class DynamicConnectionManager {
                     connections.put(remoteInfo.getLocalId(), connection);
 
                     if (!localBuffers.containsKey(remoteInfo.getLocalId())) {
-                        var buffer = deviceContexts.get(0).allocLocalBuffer(BUFFER_SIZE);
+                        var buffer = deviceContexts.get(0).allocRegisteredBuffer(BUFFER_SIZE);
                         var bufferInfo = new BufferInformation(buffer);
 
                         localBuffers.put(remoteInfo.getLocalId(), bufferInfo);
@@ -489,6 +538,8 @@ public class DynamicConnectionManager {
         private void handleBufferInfo() {
             var split = payload.split(":");
             var bufferInfo = new BufferInformation(Long.parseLong(split[1]), Long.parseLong(split[2]), Integer.parseInt(split[3]));
+
+            LOGGER.info("Received new remote buffer information: {}", bufferInfo);
 
             remoteBuffers.put(Short.parseShort(split[0]), bufferInfo);
         }

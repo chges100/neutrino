@@ -111,7 +111,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Connection {} created", connection.getId());
 
-        var buffer = connection.getDeviceContext().allocLocalBuffer(Message.getSize());
+        var buffer = connection.getDeviceContext().allocRegisteredBuffer(Message.getSize());
 
         long wrId = connection.receive(buffer);
 
@@ -171,7 +171,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Unreliable datagram created");
 
-        var buffer = unreliableDatagram.getDeviceContext().allocLocalBuffer(Message.getSize() + UnreliableDatagram.UD_Receive_Offset);
+        var buffer = unreliableDatagram.getDeviceContext().allocRegisteredBuffer(Message.getSize() + UnreliableDatagram.UD_Receive_Offset);
 
         long wrId = unreliableDatagram.receive(buffer);
 

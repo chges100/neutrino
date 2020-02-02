@@ -7,6 +7,7 @@ import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
 import de.hhu.bsinfo.neutrino.connection.util.SocketUDInformationExchanger;
+import de.hhu.bsinfo.neutrino.data.NativeString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -28,7 +29,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
-    private static final int DEFAULTBUFSIZE = 64;
+    private static final int DEFAULT_BUFFER_SIZE = 64;
+    private static final int DEFAULT_DEVICE_ID = 0;
 
     @CommandLine.Option(
             names = {"-p", "--port"},
@@ -45,9 +47,24 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var manager = new DynamicConnectionManager(port);
 
-        TimeUnit.SECONDS.sleep(4);
+        TimeUnit.SECONDS.sleep(3);
+
+        var buffer = manager.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
+
+        var string = new NativeString(buffer, 0, DEFAULT_BUFFER_SIZE);
+        string.set("Hello from node " + manager.getLocalId());
+
+        manager.remoteWriteToAll(buffer, 0, DEFAULT_BUFFER_SIZE);
+
+        TimeUnit.SECONDS.sleep(1);
+
+        manager.remoteWriteToAll(buffer, 0, DEFAULT_BUFFER_SIZE);
+
+        TimeUnit.SECONDS.sleep(2);
 
         manager.shutdown();
+
+        buffer.close();
 
         return null;
 

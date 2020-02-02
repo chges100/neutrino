@@ -43,15 +43,10 @@ public class DeviceContext {
         deviceAttributes = context.queryDevice();
     }
 
-    public RegisteredBuffer allocLocalBuffer(long size) {
+    public RegisteredBuffer allocRegisteredBuffer(long size) {
         LOGGER.info("Allocate new memory region for device {} of size {}", deviceId, size);
 
         return protectionDomain.allocateMemory(size, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE, AccessFlag.MW_BIND);
-    }
-
-    public void freeLocalBuffer(RegisteredBuffer buffer) {
-        LOGGER.info("Free memory region");
-        buffer.close();
     }
 
     public ProtectionDomain getProtectionDomain() {

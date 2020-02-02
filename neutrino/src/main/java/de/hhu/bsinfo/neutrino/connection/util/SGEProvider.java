@@ -2,10 +2,8 @@ package de.hhu.bsinfo.neutrino.connection.util;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
-import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.util.NativeObjectRegistry;
 import de.hhu.bsinfo.neutrino.verbs.ScatterGatherElement;
-import de.hhu.bsinfo.neutrino.verbs.Verbs;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -21,7 +19,7 @@ public class SGEProvider {
         this.bufferSize = bufferSize;
         this.deviceContext = deviceContext;
 
-        buffer = deviceContext.allocLocalBuffer((long) cnt * bufferSize);
+        buffer = deviceContext.allocRegisteredBuffer((long) cnt * bufferSize);
         scatterGatherElements = new ConcurrentLinkedQueue<>();
 
         for(int i = 0; i < cnt; i++) {
