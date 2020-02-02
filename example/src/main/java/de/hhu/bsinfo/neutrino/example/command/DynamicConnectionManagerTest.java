@@ -56,11 +56,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         manager.remoteWriteToAll(buffer, 0, DEFAULT_BUFFER_SIZE);
 
-        TimeUnit.SECONDS.sleep(1);
-
-        manager.remoteWriteToAll(buffer, 0, DEFAULT_BUFFER_SIZE);
-
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.SECONDS.sleep(4);
 
         manager.shutdown();
 

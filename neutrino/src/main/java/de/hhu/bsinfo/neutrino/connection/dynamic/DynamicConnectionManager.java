@@ -23,6 +23,8 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.Executors;
@@ -34,6 +36,8 @@ public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
     private static final long BUFFER_SIZE = 1024*1024;
+    private static final long POLL_TIME = 1000;
+    private static final int LOCAL_BUFFER_READ = 19;
 
     private final short localId;
 
@@ -124,6 +128,14 @@ public class DynamicConnectionManager {
 
         var connection = connections.get(remoteLocalId);
 
+        // check if remote buffer is already registred and poll
+        var startPoll = Instant.now();
+        while(!remoteBuffers.containsKey(remoteLocalId)) {
+            if(Duration.between(startPoll, Instant.now()).toMillis() > POLL_TIME) {
+                break;
+            }
+        }
+
         if(remoteBuffers.containsKey(remoteLocalId)) {
             var remoteBufferInfo = remoteBuffers.get(remoteLocalId);
             connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
@@ -169,6 +181,7 @@ public class DynamicConnectionManager {
 
         printRemoteDCHInfos();
         printRemoteRCInfos();
+        printRemoteBufferInfos();
         printLocalBufferInfos();
     }
 
@@ -199,15 +212,28 @@ public class DynamicConnectionManager {
 
     }
 
+    public void printRemoteBufferInfos() {
+        String out = "Print out remote buffer information:\n";
+
+        for(var entry : remoteBuffers.entrySet()) {
+            out += "LocalId " + entry.getKey() + " : ";
+            out += entry.getValue();
+            out += "\n";
+        }
+
+        LOGGER.info(out);
+
+    }
+
     public void printLocalBufferInfos() {
         String out = "Content of local connection RDMA buffers:\n";
 
-        for(var bufferInfo : localBuffers.entrySet()) {
-            var buffer = LocalBuffer.wrap(bufferInfo.getValue().getAddress(), bufferInfo.getValue().getCapacity());
+        for(var entry : localBuffers.entrySet()) {
+            var buffer = LocalBuffer.wrap(entry.getValue().getAddress(), entry.getValue().getCapacity());
 
-            out += "Buffer for remote " + bufferInfo.getKey() + ": ";
+            out += "Buffer for remote " + entry.getKey() + ": ";
 
-            var tmp = new NativeString(buffer, 0, 24);
+            var tmp = new NativeString(buffer, 0, LOCAL_BUFFER_READ);
 
             out += tmp.get() + "\n";
         }
@@ -246,7 +272,7 @@ public class DynamicConnectionManager {
                 var data = ByteBuffer.wrap(datagram.getData());
                 var remoteInfo = new UDInformation(data);
 
-                if (!remoteHandlerInfos.containsKey(remoteInfo.getLocalId())) {
+                if (!remoteHandlerInfos.containsKey(remoteInfo.getLocalId()) && remoteInfo.getLocalId() != localId) {
                     remoteHandlerInfos.put(remoteInfo.getLocalId(), remoteInfo);
 
                     LOGGER.info("Add new remote connection handler {}", remoteInfo);
