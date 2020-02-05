@@ -138,7 +138,11 @@ public class DynamicConnectionManager {
 
         if(remoteBuffers.containsKey(remoteLocalId)) {
             var remoteBufferInfo = remoteBuffers.get(remoteLocalId);
-            connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
+            if(connection.isConnected()) {
+                connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
+            } else {
+                LOGGER.error("Connection {} is not connected yet", connection);
+            }
         } else {
             LOGGER.error("No remote buffer registered for RDMA operation on {}", remoteLocalId);
         }
@@ -149,6 +153,8 @@ public class DynamicConnectionManager {
             var connection = new ReliableConnection(deviceContexts.get(0));
             connection.init();
             connections.put(remoteLocalId, connection);
+
+            LOGGER.info("Initiate new reliable connection ro {}", remoteLocalId);
 
             var localQP = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
             dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
@@ -180,7 +186,7 @@ public class DynamicConnectionManager {
         dynamicConnectionHandler.close();
 
         printRemoteDCHInfos();
-        printRemoteRCInfos();
+        printRCInfos();
         printRemoteBufferInfos();
         printLocalBufferInfos();
     }
@@ -200,11 +206,13 @@ public class DynamicConnectionManager {
         LOGGER.info(out);
     }
 
-    public void printRemoteRCInfos() {
+    public void printRCInfos() {
         String out = "Print out reliable connection information:\n";
 
-        for(var remoteInfo : connections.values()) {
-            out += remoteInfo;
+        for(var connection : connections.values()) {
+            out += connection;
+            out += "\n";
+            out += "connected: " + connection.isConnected();
             out += "\n";
         }
 
@@ -526,6 +534,8 @@ public class DynamicConnectionManager {
                     localQPInfo = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
 
                     dynamicConnectionHandler.answerConnectionRequest(localQPInfo, remoteHandlerInfos.get(remoteInfo.getLocalId()));
+
+                    LOGGER.info("Answer new reliable connection request from {}", remoteInfo.getLocalId());
 
                     connection.connect(remoteInfo);
 

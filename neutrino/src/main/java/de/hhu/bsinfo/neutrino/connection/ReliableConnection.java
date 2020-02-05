@@ -3,6 +3,8 @@ package de.hhu.bsinfo.neutrino.connection;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Connectable;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Executor;
+import de.hhu.bsinfo.neutrino.connection.message.Message;
+import de.hhu.bsinfo.neutrino.connection.message.MessageType;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
@@ -21,6 +23,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     private final int id;
 
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
+    private final AtomicBoolean initConnection = new AtomicBoolean(false);
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
@@ -46,7 +49,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     @Override
     public void connect(RCInformation remoteInfo) throws IOException {
 
-        if(isConnected.getAndSet(true)){
+        if(initConnection.getAndSet(true)){
             LOGGER.error("Connection already connected");
             throw new IOException("Connection is already connected");
         }
@@ -63,6 +66,10 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         }
 
         LOGGER.info("Moved queue pair into RTS state");
+
+        initialHandshake();
+
+        isConnected.getAndSet(true);
     }
 
     public long send(RegisteredBuffer data) {
@@ -161,6 +168,25 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         return completionArray.getLength();
     }
 
+    private void initialHandshake() throws IOException{
+        LOGGER.info("Initial handshake of connection {} started", getId());
+        var message = new Message(getDeviceContext(), MessageType.RC_INIT, "");
+        var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
+
+        receive(receiveBuffer);
+        send(message.getByteBuffer());
+
+        int receiveCount = 0;
+        do{
+            receiveCount = pollReceive(1);
+        } while (receiveCount == 0);
+
+        message.close();
+        receiveBuffer.close();
+
+        LOGGER.info("Initial handshake of connection {} finished", getId());
+    }
+
     @Override
     public void close() throws IOException {
         LOGGER.info("Close reliable connection {}", id);
@@ -173,6 +199,10 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
     public QueuePair getQueuePair() {
         return queuePair;
+    }
+
+    public boolean isConnected() {
+        return isConnected.get();
     }
 
     @Override

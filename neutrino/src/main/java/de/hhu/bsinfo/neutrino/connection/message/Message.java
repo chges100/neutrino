@@ -11,4 +11,8 @@ public class Message extends BaseMessage<RegisteredBuffer> {
     public Message(RegisteredBuffer byteBuffer) {
         super(byteBuffer);
     }
+
+    public void close() {
+        getByteBuffer().close();
+    }
 }

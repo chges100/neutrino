@@ -4,5 +4,6 @@ public enum MessageType {
     COMMON,
     CONNECTION_REQUEST,
     CONNECTION_ACK,
-    BUFFER_INFO
+    BUFFER_INFO,
+    RC_INIT
 }
