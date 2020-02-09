@@ -31,20 +31,20 @@ public class DeviceContext {
             throw new IOException("Cannot open InfiniBand device");
         }
 
-        LOGGER.info("Allocate protection domain");
+        LOGGER.trace("Allocate protection domain");
 
         protectionDomain = context.allocateProtectionDomain();
         if(protectionDomain == null) {
             throw  new IOException("Unable to allocate protection domain");
         }
 
-        LOGGER.info("Query device attributes");
+        LOGGER.trace("Query device attributes");
 
         deviceAttributes = context.queryDevice();
     }
 
     public RegisteredBuffer allocRegisteredBuffer(long size) {
-        LOGGER.info("Allocate new memory region for device {} of size {}", deviceId, size);
+        LOGGER.trace("Allocate new memory region for device {} of size {}", deviceId, size);
 
         return protectionDomain.allocateMemory(size, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE, AccessFlag.MW_BIND);
     }

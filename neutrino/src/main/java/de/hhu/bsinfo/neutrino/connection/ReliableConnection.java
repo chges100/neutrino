@@ -67,7 +67,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         LOGGER.info("Moved queue pair into RTS state");
 
-        initialHandshake();
+        //initialHandshake();
 
         isConnected.getAndSet(true);
     }
@@ -169,7 +169,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     }
 
     private void initialHandshake() throws IOException{
-        LOGGER.info("Initial handshake of connection {} started", getId());
+        LOGGER.debug("Initial handshake of connection {} started", getId());
         var message = new Message(getDeviceContext(), MessageType.RC_INIT, "");
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
 
@@ -184,7 +184,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         message.close();
         receiveBuffer.close();
 
-        LOGGER.info("Initial handshake of connection {} finished", getId());
+        LOGGER.debug("Initial handshake of connection {} finished", getId());
     }
 
     @Override

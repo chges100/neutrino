@@ -47,10 +47,9 @@ public class DynamicConnectionManager {
     private final UDInformation localUDInformation;
 
     private final HashMap<Short, UDInformation> remoteHandlerInfos;
-    private final HashMap<Short, RCInformation> remoteConnectionInfos;
     private final HashMap<Short, ReliableConnection> connections;
     private final HashMap<Short, BufferInformation> remoteBuffers;
-    private final HashMap<Short, BufferInformation> localBuffers;
+    private final HashMap<Short, RegisteredBuffer> localBuffers;
 
     private final UDInformationPropagator udPropagator;
     private final UDInformationReceiver udReceiver;
@@ -64,7 +63,6 @@ public class DynamicConnectionManager {
 
         deviceContexts = new ArrayList<>();
         remoteHandlerInfos = new HashMap<>();
-        remoteConnectionInfos = new HashMap<>();
         connections = new HashMap<>();
         remoteBuffers = new HashMap<>();
         localBuffers = new HashMap<>();
@@ -86,10 +84,10 @@ public class DynamicConnectionManager {
 
         UDPPort = port;
 
-        LOGGER.info("Create UD to handle connection requests");
+        LOGGER.trace("Create UD to handle connection requests");
         dynamicConnectionHandler = new DynamicConnectionHandler(deviceContexts.get(0));
         dynamicConnectionHandler.init();
-        LOGGER.info("UD data: {}", dynamicConnectionHandler);
+        LOGGER.info("Data of UD: {}", dynamicConnectionHandler);
 
         localUDInformation = new UDInformation((byte) 1, dynamicConnectionHandler.getPortAttributes().getLocalId(), dynamicConnectionHandler.getQueuePair().getQueuePairNumber(),
                 dynamicConnectionHandler.getQueuePair().queryAttributes().getQkey());
@@ -136,25 +134,25 @@ public class DynamicConnectionManager {
             }
         }
 
-        if(remoteBuffers.containsKey(remoteLocalId)) {
-            var remoteBufferInfo = remoteBuffers.get(remoteLocalId);
-            if(connection.isConnected()) {
-                connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
-            } else {
-                LOGGER.error("Connection {} is not connected yet", connection);
-            }
-        } else {
-            LOGGER.error("No remote buffer registered for RDMA operation on {}", remoteLocalId);
+        boolean buffer = remoteBuffers.containsKey(remoteLocalId);
+        boolean connected = connection.isConnected();
+        while (!buffer || !connected) {
+            buffer = remoteBuffers.containsKey(remoteLocalId);
+            connected = connection.isConnected();
         }
+
+        var remoteBufferInfo = remoteBuffers.get(remoteLocalId);
+        connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
     }
 
     public void createConnection(short remoteLocalId) {
         try {
-            var connection = new ReliableConnection(deviceContexts.get(0));
+            connections.put(remoteLocalId, new ReliableConnection(deviceContexts.get(0)));
+            var connection = connections.get(remoteLocalId);
             connection.init();
-            connections.put(remoteLocalId, connection);
 
-            LOGGER.info("Initiate new reliable connection ro {}", remoteLocalId);
+
+            LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
 
             var localQP = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
             dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
@@ -163,13 +161,13 @@ public class DynamicConnectionManager {
                 var buffer = deviceContexts.get(0).allocRegisteredBuffer(BUFFER_SIZE);
                 var bufferInfo = new BufferInformation(buffer);
 
-                localBuffers.put(remoteLocalId, bufferInfo);
+                localBuffers.put(remoteLocalId, buffer);
 
                 dynamicConnectionHandler.sendBufferInfo(bufferInfo, connection.getPortAttributes().getLocalId(), remoteLocalId);
             }
 
         } catch (Exception e) {
-            LOGGER.info("Could not create connection to {}", remoteLocalId);
+            LOGGER.info("Could not create connection to {}\n {}", remoteLocalId, e);
         }
     }
 
@@ -183,6 +181,7 @@ public class DynamicConnectionManager {
         udPropagator.shutdown();
         udReceiver.shutdown();
 
+        executor.shutdown();
         dynamicConnectionHandler.close();
 
         printRemoteDCHInfos();
@@ -237,11 +236,10 @@ public class DynamicConnectionManager {
         String out = "Content of local connection RDMA buffers:\n";
 
         for(var entry : localBuffers.entrySet()) {
-            var buffer = LocalBuffer.wrap(entry.getValue().getAddress(), entry.getValue().getCapacity());
 
-            out += "Buffer for remote " + entry.getKey() + ": ";
+            out += "Buffer for remote " + entry.getKey() +  " with address " + entry.getValue().getHandle() + ": ";
 
-            var tmp = new NativeString(buffer, 0, LOCAL_BUFFER_READ);
+            var tmp = new NativeString(entry.getValue(), 0, LOCAL_BUFFER_READ);
 
             out += tmp.get() + "\n";
         }
@@ -283,7 +281,7 @@ public class DynamicConnectionManager {
                 if (!remoteHandlerInfos.containsKey(remoteInfo.getLocalId()) && remoteInfo.getLocalId() != localId) {
                     remoteHandlerInfos.put(remoteInfo.getLocalId(), remoteInfo);
 
-                    LOGGER.info("Add new remote connection handler {}", remoteInfo);
+                    LOGGER.info("UDP: Add new remote connection handler {}", remoteInfo);
                 }
             }
         }
@@ -528,7 +526,8 @@ public class DynamicConnectionManager {
 
             } else {
                 try {
-                    var connection = new ReliableConnection(deviceContexts.get(0));
+                    connections.put(remoteInfo.getLocalId(), new ReliableConnection(deviceContexts.get(0)));
+                    var connection = connections.get(remoteInfo.getLocalId());
                     connection.init();
 
                     localQPInfo = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
@@ -537,20 +536,18 @@ public class DynamicConnectionManager {
 
                     LOGGER.info("Answer new reliable connection request from {}", remoteInfo.getLocalId());
 
-                    connection.connect(remoteInfo);
-
-                    connections.put(remoteInfo.getLocalId(), connection);
-
                     if (!localBuffers.containsKey(remoteInfo.getLocalId())) {
                         var buffer = deviceContexts.get(0).allocRegisteredBuffer(BUFFER_SIZE);
                         var bufferInfo = new BufferInformation(buffer);
 
-                        localBuffers.put(remoteInfo.getLocalId(), bufferInfo);
+                        localBuffers.put(remoteInfo.getLocalId(), buffer);
 
                         dynamicConnectionHandler.sendBufferInfo(bufferInfo, connection.getPortAttributes().getLocalId(), remoteInfo.getLocalId());
                     }
+
+                    connection.connect(remoteInfo);
                 } catch (Exception e) {
-                    LOGGER.error("Could not create connection to {}", remoteInfo);
+                    LOGGER.error("Could not create connection to {}\n {}", remoteInfo, e);
                 }
             }
         }
