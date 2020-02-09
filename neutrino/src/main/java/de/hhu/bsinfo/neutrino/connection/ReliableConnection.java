@@ -59,7 +59,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
             throw new IOException("Unable to move queue pair into RTR state");
         }
 
-        LOGGER.info("Moved queue pair into RTR state");
+        LOGGER.info("Moved queue pair into RTR state with remote {}", remoteInfo.getLocalId());
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToSendAttributesRC())) {
             throw new IOException("Unable to move queue pair into RTS state");
@@ -67,7 +67,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         LOGGER.info("Moved queue pair into RTS state");
 
-        //initialHandshake();
+        initialHandshake();
 
         isConnected.getAndSet(true);
     }
@@ -175,6 +175,11 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         receive(receiveBuffer);
         send(message.getByteBuffer());
+
+        int sentCount = 0;
+        do{
+            sentCount = pollSend(1);
+        } while (sentCount == 0);
 
         int receiveCount = 0;
         do{
