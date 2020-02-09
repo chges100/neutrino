@@ -184,6 +184,15 @@ public class DynamicConnectionManager {
         executor.shutdown();
         dynamicConnectionHandler.close();
 
+        try {
+            for(var connection : connections.values()) {
+                connection.disconnect();
+            }
+        } catch (Exception e) {
+            LOGGER.error("Could not disconnect all connections: {}", e);
+        }
+
+
         printRemoteDCHInfos();
         printRCInfos();
         printRemoteBufferInfos();

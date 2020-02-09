@@ -193,6 +193,19 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     }
 
     @Override
+    public void disconnect() throws IOException{
+
+        isConnected.getAndSet(false);
+        initConnection.getAndSet(false);
+
+        if(!queuePair.modify(QueuePair.Attributes.Builder.buildResetAttributesRC())) {
+            throw new IOException("Unable to move queue pair into RESET state");
+        }
+
+        init();
+    }
+
+    @Override
     public void close() throws IOException {
         LOGGER.info("Close reliable connection {}", id);
         queuePair.close();

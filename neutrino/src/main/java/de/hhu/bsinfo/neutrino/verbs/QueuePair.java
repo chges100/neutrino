@@ -1084,6 +1084,16 @@ public class QueuePair extends Struct implements AutoCloseable {
                         .withSendPacketNumber(0);
             }
 
+            public static Builder buildResetAttributesRC() {
+                return new Builder()
+                        .withState(State.RESET);
+            }
+
+            public static Builder buildResetAttributesUD() {
+                return new Builder()
+                        .withState(State.RESET);
+            }
+
             public Builder withState(final State state) {
                 this.state = state;
                 attributeFlags.add(AttributeFlag.STATE);
