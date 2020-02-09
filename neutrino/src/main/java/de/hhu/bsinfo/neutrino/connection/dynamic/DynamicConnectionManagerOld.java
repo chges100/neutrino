@@ -27,22 +27,17 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.locks.LockSupport;
 
-public class DynamicConnectionManager {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
+public class DynamicConnectionManagerOld {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerOld.class);
 
     private static final long BUFFER_SIZE = 1024*1024;
     private static final long POLL_TIME = 1000;
     private static final int LOCAL_BUFFER_READ = 19;
-    private static final int MAX_CONNECTONS = 3;
-    private static final int NULL_INDEX = Integer.MAX_VALUE;
-    private static final short LID_MAX = Short.MAX_VALUE;
 
     private final short localId;
 
@@ -52,12 +47,9 @@ public class DynamicConnectionManager {
     private final UDInformation localUDInformation;
 
     private final HashMap<Short, UDInformation> remoteHandlerInfos;
+    private final HashMap<Short, ReliableConnection> connections;
     private final HashMap<Short, BufferInformation> remoteBuffers;
     private final HashMap<Short, RegisteredBuffer> localBuffers;
-
-    private final AtomicIntegerArray lidToIndex;
-    private final ReliableConnection connections[];
-    private final ConcurrentLinkedQueue<Integer> lru;
 
     private final UDInformationPropagator udPropagator;
     private final UDInformationReceiver udReceiver;
@@ -66,18 +58,14 @@ public class DynamicConnectionManager {
 
     private final ThreadPoolExecutor executor;
 
-    public DynamicConnectionManager(int port) throws IOException {
+    public DynamicConnectionManagerOld(int port) throws IOException {
         LOGGER.info("Initialize dynamic connection handler");
 
         deviceContexts = new ArrayList<>();
         remoteHandlerInfos = new HashMap<>();
+        connections = new HashMap<>();
         remoteBuffers = new HashMap<>();
         localBuffers = new HashMap<>();
-
-        lidToIndex = new AtomicIntegerArray(LID_MAX);
-        for(int i = 0; i < LID_MAX; i++) {
-            lidToIndex.set(i, NULL_INDEX);
-        }
 
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
@@ -92,15 +80,6 @@ public class DynamicConnectionManager {
 
         if(deviceContexts.isEmpty()) {
             throw new IOException("Could not initialize any Infiniband device");
-        }
-
-        connections = new ReliableConnection[MAX_CONNECTONS];
-        lru = new ConcurrentLinkedQueue<>();
-
-        for(int i = 0; i < MAX_CONNECTONS; i++) {
-            connections[i] = new ReliableConnection(deviceContexts.get(0));
-            connections[i].init();
-            lru.offer(i);
         }
 
         UDPPort = port;
@@ -141,9 +120,11 @@ public class DynamicConnectionManager {
     }
 
     private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, short remoteLocalId) {
-        if(lidToIndex.get(remoteLocalId) == NULL_INDEX) {
+        if(!connections.containsKey(remoteLocalId)) {
             createConnection(remoteLocalId);
         }
+
+        var connection = connections.get(remoteLocalId);
 
         // check if remote buffer is already registred and poll
         var startPoll = Instant.now();
@@ -152,32 +133,28 @@ public class DynamicConnectionManager {
                 break;
             }
         }
-        // TODO: this has to be made thread-safe!!
-
-        int idx = lidToIndex.get(remoteLocalId);
 
         boolean buffer = remoteBuffers.containsKey(remoteLocalId);
-        boolean connected = connections[idx].isConnected();
+        boolean connected = connection.isConnected();
         while (!buffer || !connected) {
             buffer = remoteBuffers.containsKey(remoteLocalId);
-            connected = connections[idx].isConnected();
+            connected = connection.isConnected();
         }
 
         var remoteBufferInfo = remoteBuffers.get(remoteLocalId);
-        connections[idx].execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
+        connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
     }
 
     public void createConnection(short remoteLocalId) {
         try {
-            int idx = lru.poll();
-            short oldRemoteLid = connections[idx].disconnect();
+            connections.put(remoteLocalId, new ReliableConnection(deviceContexts.get(0)));
+            var connection = connections.get(remoteLocalId);
+            connection.init();
 
-            lidToIndex.set(oldRemoteLid, NULL_INDEX);
-            lidToIndex.set(remoteLocalId, idx);
 
             LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
 
-            var localQP = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
+            var localQP = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
             dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
 
             if (!localBuffers.containsKey(remoteLocalId)) {
@@ -186,7 +163,7 @@ public class DynamicConnectionManager {
 
                 localBuffers.put(remoteLocalId, buffer);
 
-                dynamicConnectionHandler.sendBufferInfo(bufferInfo, connections[idx].getPortAttributes().getLocalId(), remoteLocalId);
+                dynamicConnectionHandler.sendBufferInfo(bufferInfo, connection.getPortAttributes().getLocalId(), remoteLocalId);
             }
 
         } catch (Exception e) {
@@ -208,7 +185,7 @@ public class DynamicConnectionManager {
         dynamicConnectionHandler.close();
 
         try {
-            for(var connection : connections) {
+            for(var connection : connections.values()) {
                 connection.disconnect();
             }
         } catch (Exception e) {
@@ -240,7 +217,7 @@ public class DynamicConnectionManager {
     public void printRCInfos() {
         String out = "Print out reliable connection information:\n";
 
-        for(var connection : connections) {
+        for(var connection : connections.values()) {
             out += connection;
             out += "\n";
             out += "connected: " + connection.isConnected();
@@ -549,22 +526,20 @@ public class DynamicConnectionManager {
 
             RCInformation localQPInfo;
 
-            if(lidToIndex.get(remoteInfo.getLocalId()) != NULL_INDEX) {
-                var idx = lidToIndex.get(remoteInfo.getLocalId());
+            if(connections.containsKey(remoteInfo.getLocalId())) {
+                var connection = connections.get(remoteInfo.getLocalId());
 
-                localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
+                localQPInfo = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
 
                 dynamicConnectionHandler.answerConnectionRequest(localQPInfo, remoteHandlerInfos.get(remoteInfo.getLocalId()));
 
             } else {
                 try {
-                    int idx = lru.poll();
-                    short oldRemoteLid = connections[idx].disconnect();
+                    connections.put(remoteInfo.getLocalId(), new ReliableConnection(deviceContexts.get(0)));
+                    var connection = connections.get(remoteInfo.getLocalId());
+                    connection.init();
 
-                    lidToIndex.set(oldRemoteLid, NULL_INDEX);
-                    lidToIndex.set(remoteInfo.getLocalId(), idx);
-
-                    localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
+                    localQPInfo = new RCInformation((byte) 1, connection.getPortAttributes().getLocalId(), connection.getQueuePair().getQueuePairNumber());
 
                     dynamicConnectionHandler.answerConnectionRequest(localQPInfo, remoteHandlerInfos.get(remoteInfo.getLocalId()));
 
@@ -576,10 +551,10 @@ public class DynamicConnectionManager {
 
                         localBuffers.put(remoteInfo.getLocalId(), buffer);
 
-                        dynamicConnectionHandler.sendBufferInfo(bufferInfo, connections[idx].getPortAttributes().getLocalId(), remoteInfo.getLocalId());
+                        dynamicConnectionHandler.sendBufferInfo(bufferInfo, connection.getPortAttributes().getLocalId(), remoteInfo.getLocalId());
                     }
-                    // TODO: Check for changes
-                    connections[idx].connect(remoteInfo);
+
+                    connection.connect(remoteInfo);
                 } catch (Exception e) {
                     LOGGER.error("Could not create connection to {}\n {}", remoteInfo, e);
                 }
@@ -592,10 +567,10 @@ public class DynamicConnectionManager {
 
             LOGGER.info("Got new connection ack from {}", remoteInfo);
 
-            var idx = lidToIndex.get(remoteInfo.getLocalId());
-            // TODO: Check if this is still the correct connection
+            var connection = connections.get(remoteInfo.getLocalId());
+
             try {
-                connections[idx].connect(remoteInfo);
+                connection.connect(remoteInfo);
             } catch (Exception e) {
                 LOGGER.error("Could not connect to {}", remoteInfo);
             }

@@ -1,21 +1,11 @@
 package de.hhu.bsinfo.neutrino.example.command;
 
-import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
-import de.hhu.bsinfo.neutrino.connection.StaticConnectionManager;
-import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
-import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
-import de.hhu.bsinfo.neutrino.connection.message.Message;
-import de.hhu.bsinfo.neutrino.connection.message.MessageType;
-import de.hhu.bsinfo.neutrino.connection.util.SocketUDInformationExchanger;
+import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManagerOld;
 import de.hhu.bsinfo.neutrino.data.NativeString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.sql.Time;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
@@ -45,7 +35,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     @Override
     public Void call() throws Exception {
 
-        var manager = new DynamicConnectionManager(port);
+        var manager = new DynamicConnectionManagerOld(port);
 
         TimeUnit.SECONDS.sleep(3);
 

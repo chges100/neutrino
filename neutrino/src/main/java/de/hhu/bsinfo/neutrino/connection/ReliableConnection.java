@@ -18,9 +18,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ReliableConnection extends QPSocket implements Connectable<RCInformation>, Executor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
+    private static final short LID_MAX = Short.MAX_VALUE;
 
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private final int id;
+    private short remoteLid = LID_MAX;
 
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
     private final AtomicBoolean initConnection = new AtomicBoolean(false);
@@ -58,6 +60,8 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
                 remoteInfo.getQueuePairNumber(), remoteInfo.getLocalId(), remoteInfo.getPortNumber()))) {
             throw new IOException("Unable to move queue pair into RTR state");
         }
+
+        remoteLid = remoteInfo.getLocalId();
 
         LOGGER.info("Moved queue pair into RTR state with remote {}", remoteInfo.getLocalId());
 
@@ -193,7 +197,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     }
 
     @Override
-    public void disconnect() throws IOException{
+    public short disconnect() throws IOException{
 
         isConnected.getAndSet(false);
         initConnection.getAndSet(false);
@@ -203,6 +207,8 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         }
 
         init();
+
+        return remoteLid;
     }
 
     @Override
