@@ -19,6 +19,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
     private static final short LID_MAX = Short.MAX_VALUE;
+    private static final int BATCH_SIZE = 10;
 
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private final int id;
@@ -174,7 +175,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
     private void initialHandshake() throws IOException{
         LOGGER.debug("Initial handshake of connection {} started", getId());
-        var message = new Message(getDeviceContext(), MessageType.RC_INIT, "");
+        var message = new Message(getDeviceContext(), MessageType.RC_HANDSHAKE, "");
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
 
         receive(receiveBuffer);
@@ -201,6 +202,42 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         isConnected.getAndSet(false);
         initConnection.getAndSet(false);
+
+        if(remoteLid == LID_MAX) {
+            return remoteLid;
+        }
+
+        var message = new Message(getDeviceContext(), MessageType.RC_HANDSHAKE, "");
+        var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
+
+        var receiveWrId = receive(receiveBuffer);
+        var sendWrId = send(message.getByteBuffer());
+
+        boolean isSent = false;
+        while(!isSent) {
+            var wcs = pollSendCompletions(BATCH_SIZE);
+            for(int i = 0; i < wcs.getLength(); i++) {
+                if(wcs.get(i).getId() == sendWrId) {
+                    isSent = true;
+                }
+            }
+        }
+
+        boolean isReceived = false;
+        while(!isReceived) {
+            var wcs = pollSendCompletions(BATCH_SIZE);
+            for(int i = 0; i < wcs.getLength(); i++) {
+                if(wcs.get(i).getId() == sendWrId) {
+                    var msg = new Message(receiveBuffer);
+                    if(msg.getMessageType() == MessageType.RC_DISCONNECT)
+                        isReceived = true;
+                }
+            }
+        }
+
+        message.close();
+        receiveBuffer.close();
+
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildResetAttributesRC())) {
             throw new IOException("Unable to move queue pair into RESET state");

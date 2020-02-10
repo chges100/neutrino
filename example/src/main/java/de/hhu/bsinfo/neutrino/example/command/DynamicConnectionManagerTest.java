@@ -1,5 +1,6 @@
 package de.hhu.bsinfo.neutrino.example.command;
 
+import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManagerOld;
 import de.hhu.bsinfo.neutrino.data.NativeString;
 import org.slf4j.Logger;
@@ -35,7 +36,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     @Override
     public Void call() throws Exception {
 
-        var manager = new DynamicConnectionManagerOld(port);
+        var manager = new DynamicConnectionManager(port);
 
         TimeUnit.SECONDS.sleep(3);
 

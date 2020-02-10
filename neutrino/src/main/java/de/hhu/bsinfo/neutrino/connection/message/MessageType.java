@@ -4,6 +4,8 @@ public enum MessageType {
     COMMON,
     CONNECTION_REQUEST,
     CONNECTION_ACK,
+    DISCONNECT,
     BUFFER_INFO,
-    RC_INIT
+    RC_HANDSHAKE,
+    RC_DISCONNECT
 }

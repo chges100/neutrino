@@ -52,12 +52,13 @@ public class DynamicConnectionManager {
     private final UDInformation localUDInformation;
 
     private final HashMap<Short, UDInformation> remoteHandlerInfos;
-    private final HashMap<Short, BufferInformation> remoteBuffers;
-    private final HashMap<Short, RegisteredBuffer> localBuffers;
 
     private final AtomicIntegerArray lidToIndex;
     private final ReliableConnection connections[];
     private final ConcurrentLinkedQueue<Integer> lru;
+    private final BufferInformation remoteBuffers[];
+    private final RegisteredBuffer localBuffers[];
+
 
     private final UDInformationPropagator udPropagator;
     private final UDInformationReceiver udReceiver;
@@ -71,13 +72,14 @@ public class DynamicConnectionManager {
 
         deviceContexts = new ArrayList<>();
         remoteHandlerInfos = new HashMap<>();
-        remoteBuffers = new HashMap<>();
-        localBuffers = new HashMap<>();
 
         lidToIndex = new AtomicIntegerArray(LID_MAX);
         for(int i = 0; i < LID_MAX; i++) {
             lidToIndex.set(i, NULL_INDEX);
         }
+
+        remoteBuffers = new BufferInformation[LID_MAX];
+        localBuffers = new RegisteredBuffer[LID_MAX];
 
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
@@ -147,7 +149,7 @@ public class DynamicConnectionManager {
 
         // check if remote buffer is already registred and poll
         var startPoll = Instant.now();
-        while(!remoteBuffers.containsKey(remoteLocalId)) {
+        while(remoteBuffers[remoteLocalId] == null) {
             if(Duration.between(startPoll, Instant.now()).toMillis() > POLL_TIME) {
                 break;
             }
@@ -156,15 +158,11 @@ public class DynamicConnectionManager {
 
         int idx = lidToIndex.get(remoteLocalId);
 
-        boolean buffer = remoteBuffers.containsKey(remoteLocalId);
-        boolean connected = connections[idx].isConnected();
-        while (!buffer || !connected) {
-            buffer = remoteBuffers.containsKey(remoteLocalId);
-            connected = connections[idx].isConnected();
+        while (remoteBuffers[localId] == null || !connections[idx].isConnected()) {
+            LockSupport.parkNanos(POLL_TIME);
         }
 
-        var remoteBufferInfo = remoteBuffers.get(remoteLocalId);
-        connections[idx].execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
+        connections[idx].execute(data, opCode, offset, length, remoteBuffers[remoteLocalId].getAddress(), remoteBuffers[remoteLocalId].getRemoteKey(), 0);
     }
 
     public void createConnection(short remoteLocalId) {
@@ -172,7 +170,11 @@ public class DynamicConnectionManager {
             int idx = lru.poll();
             short oldRemoteLid = connections[idx].disconnect();
 
-            lidToIndex.set(oldRemoteLid, NULL_INDEX);
+            if(oldRemoteLid < LID_MAX) {
+                lidToIndex.set(oldRemoteLid, NULL_INDEX);
+                dynamicConnectionHandler.sendMessage(MessageType.DISCONNECT, localId + "", remoteHandlerInfos.get(oldRemoteLid));
+            }
+
             lidToIndex.set(remoteLocalId, idx);
 
             LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
@@ -180,11 +182,11 @@ public class DynamicConnectionManager {
             var localQP = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
             dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
 
-            if (!localBuffers.containsKey(remoteLocalId)) {
+            if (localBuffers[remoteLocalId] == null) {
                 var buffer = deviceContexts.get(0).allocRegisteredBuffer(BUFFER_SIZE);
                 var bufferInfo = new BufferInformation(buffer);
 
-                localBuffers.put(remoteLocalId, buffer);
+                localBuffers[remoteLocalId] = buffer;
 
                 dynamicConnectionHandler.sendBufferInfo(bufferInfo, connections[idx].getPortAttributes().getLocalId(), remoteLocalId);
             }
@@ -254,10 +256,13 @@ public class DynamicConnectionManager {
     public void printRemoteBufferInfos() {
         String out = "Print out remote buffer information:\n";
 
-        for(var entry : remoteBuffers.entrySet()) {
-            out += "LocalId " + entry.getKey() + " : ";
-            out += entry.getValue();
-            out += "\n";
+        for(int i = 0; i < remoteBuffers.length; i++) {
+            if(remoteBuffers[i] != null) {
+                out += "LocalId " + i + " : ";
+                out += remoteBuffers[i];
+                out += "\n";
+            }
+
         }
 
         LOGGER.info(out);
@@ -267,13 +272,13 @@ public class DynamicConnectionManager {
     public void printLocalBufferInfos() {
         String out = "Content of local connection RDMA buffers:\n";
 
-        for(var entry : localBuffers.entrySet()) {
+        for(int i = 0; i < localBuffers.length; i++) {
 
-            out += "Buffer for remote " + entry.getKey() +  " with address " + entry.getValue().getHandle() + ": ";
-
-            var tmp = new NativeString(entry.getValue(), 0, LOCAL_BUFFER_READ);
-
-            out += tmp.get() + "\n";
+            if(localBuffers[i] != null) {
+                out += "Buffer for remote " + i +  " with address " + localBuffers[i].getHandle() + ": ";
+                var tmp = new NativeString(localBuffers[i], 0, LOCAL_BUFFER_READ);
+                out += tmp.get() + "\n";
+            }
         }
 
         LOGGER.info(out);
@@ -533,6 +538,9 @@ public class DynamicConnectionManager {
                 case BUFFER_INFO:
                     handleBufferInfo();
                     break;
+                case DISCONNECT:
+                    handleDisconnect();
+                    break;
                 default:
                     LOGGER.info("Got message {}", payload);
                     break;
@@ -570,11 +578,11 @@ public class DynamicConnectionManager {
 
                     LOGGER.info("Answer new reliable connection request from {}", remoteInfo.getLocalId());
 
-                    if (!localBuffers.containsKey(remoteInfo.getLocalId())) {
+                    if (localBuffers[remoteInfo.getLocalId()] != null) {
                         var buffer = deviceContexts.get(0).allocRegisteredBuffer(BUFFER_SIZE);
                         var bufferInfo = new BufferInformation(buffer);
 
-                        localBuffers.put(remoteInfo.getLocalId(), buffer);
+                        localBuffers[remoteInfo.getLocalId()] =  buffer;
 
                         dynamicConnectionHandler.sendBufferInfo(bufferInfo, connections[idx].getPortAttributes().getLocalId(), remoteInfo.getLocalId());
                     }
@@ -608,7 +616,21 @@ public class DynamicConnectionManager {
 
             LOGGER.info("Received new remote buffer information: {}", bufferInfo);
 
-            remoteBuffers.put(Short.parseShort(split[0]), bufferInfo);
+            remoteBuffers[Short.parseShort(split[0])] = bufferInfo;
+        }
+
+        private void handleDisconnect() {
+            var remoteLocalId = Short.parseShort(payload);
+
+            var idx = lidToIndex.getAndSet(remoteLocalId, LID_MAX);
+            try {
+                connections[idx].disconnect();
+            } catch (Exception e) {
+                LOGGER.error("Could not disconnect connection {}", idx);
+            }
+
+            lru.remove(idx);
+            lru.add(idx);
         }
     }
 }
