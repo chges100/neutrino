@@ -192,7 +192,8 @@ public class DynamicConnectionManager {
             }
 
         } catch (Exception e) {
-            LOGGER.info("Could not create connection to {}\n {}", remoteLocalId, e);
+            LOGGER.error("Could not create connection to {}\n {}", remoteLocalId, e);
+            e.printStackTrace();
         }
     }
 
@@ -569,7 +570,10 @@ public class DynamicConnectionManager {
                     int idx = lru.poll();
                     short oldRemoteLid = connections[idx].disconnect();
 
-                    lidToIndex.set(oldRemoteLid, NULL_INDEX);
+                    if(oldRemoteLid < LID_MAX) {
+                        lidToIndex.set(oldRemoteLid, NULL_INDEX);
+                    }
+
                     lidToIndex.set(remoteInfo.getLocalId(), idx);
 
                     localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
@@ -590,6 +594,7 @@ public class DynamicConnectionManager {
                     connections[idx].connect(remoteInfo);
                 } catch (Exception e) {
                     LOGGER.error("Could not create connection to {}\n {}", remoteInfo, e);
+                    e.printStackTrace();
                 }
             }
         }
