@@ -72,7 +72,8 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         LOGGER.info("Moved queue pair into RTS state");
 
-        initialHandshake();
+        // not necessary?
+        //initialHandshake();
 
         isConnected.getAndSet(true);
     }
@@ -207,6 +208,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
             return remoteLid;
         }
 
+        int oldRemoteLid = remoteLid;
         remoteLid = LID_MAX;
 
         var message = new Message(getDeviceContext(), MessageType.RC_HANDSHAKE, "");
@@ -246,6 +248,8 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         }
 
         init();
+
+        LOGGER.info("Disconnected connection {} from {}", id, oldRemoteLid);
 
         return remoteLid;
     }

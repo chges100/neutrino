@@ -161,8 +161,6 @@ public class DynamicConnectionManager {
 
         int idx = lidToIndex.get(remoteLocalId);
 
-        // TODO: this has to be made thread-safe!!
-
         while (remoteBuffers[localId] == null || !connections[idx].isConnected()) {
             LockSupport.parkNanos(EXECUTE_POLL_TIME);
         }
@@ -188,9 +186,11 @@ public class DynamicConnectionManager {
             }
         } while (!gotID);
 
+        LOGGER.debug("LRU gave index {}", idx);
+
 
         try {
-            rwLocks[idx].writeLock();
+            long stamp = rwLocks[idx].writeLock();
 
             short oldRemoteLid = connections[idx].disconnect();
 
@@ -611,15 +611,15 @@ public class DynamicConnectionManager {
             LOGGER.info("Got new connection ack from {}", remoteInfo);
 
             var idx = lidToIndex.get(remoteInfo.getLocalId());
-            long stamp = rwLocks[idx].writeLock();
-            // TODO: Check if this is still the correct connection
+            long stamp = rwLocks[idx].readLock();
+
             try {
                 connections[idx].connect(remoteInfo);
                 lru.offer(idx);
             } catch (Exception e) {
                 LOGGER.error("Could not connect to {}", remoteInfo);
             } finally {
-                rwLocks[idx].unlockWrite(stamp);
+                rwLocks[idx].unlockRead(stamp);
             }
 
         }
@@ -634,6 +634,8 @@ public class DynamicConnectionManager {
         }
 
         private void handleDisconnect() {
+
+            // TODO: switch to lock-based
             var remoteLocalId = Short.parseShort(payload);
 
             var idx = lidToIndex.getAndSet(remoteLocalId, LID_MAX);
