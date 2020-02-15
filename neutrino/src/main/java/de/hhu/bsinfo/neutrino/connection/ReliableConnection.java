@@ -207,6 +207,8 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
             return remoteLid;
         }
 
+        remoteLid = LID_MAX;
+
         var message = new Message(getDeviceContext(), MessageType.RC_HANDSHAKE, "");
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
 
