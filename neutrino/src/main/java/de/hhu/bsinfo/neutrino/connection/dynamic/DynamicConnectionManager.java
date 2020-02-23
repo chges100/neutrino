@@ -178,6 +178,8 @@ public class DynamicConnectionManager {
 
     private int createConnection(short remoteLocalId) {
 
+        LOGGER.debug("Begin to create connection to {}", remoteLocalId);
+
         int idx = NULL_INDEX;
 
         // if no ids are available poll
@@ -196,8 +198,9 @@ public class DynamicConnectionManager {
             long stamp = rwLocks[idx].writeLock();
 
             // check if another thread has already connected to remote
-            if(!lidToIndex.compareAndSet(remoteLocalId, NULL_INDEX, idx)) {
-                throw new IOException();
+            var oldIdx = lidToIndex.compareAndExchange(remoteLocalId, NULL_INDEX, idx);
+            if(lidToIndex.compareAndSet(remoteLocalId, NULL_INDEX, idx)) {
+                throw new IOException("Connection to remote is already created");
             }
 
             short oldRemoteLid = connections[idx].getRemoteLocalId();
@@ -208,13 +211,11 @@ public class DynamicConnectionManager {
                 connections[idx].disconnect();
             }
 
-
-
         } catch (Exception e) {
             lru.offer(idx);
             idx = NULL_INDEX;
             LOGGER.error("Could not create connection to {}\n {}", remoteLocalId, e);
-            e.printStackTrace();
+            //e.printStackTrace();
 
         } finally {
             if(rwLocks[idx].isWriteLocked()) {
@@ -662,12 +663,12 @@ public class DynamicConnectionManager {
 
         private void handleDisconnect() {
 
-            // TODO: check if locking is correct
+            // TODO: check if locking is correct - there may be problems regarding the lid-table
             var remoteLocalId = Short.parseShort(payload);
 
             LOGGER.debug("Got disconnect from {}", remoteLocalId);
 
-            var idx = lidToIndex.getAndSet(remoteLocalId, LID_MAX);
+            var idx = lidToIndex.getAndSet(remoteLocalId, NULL_INDEX);
             long stamp = 0;
             try {
                 stamp = rwLocks[idx].writeLock();
