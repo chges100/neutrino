@@ -23,7 +23,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private final int id;
-    private short remoteLid = LID_MAX;
+    private AtomicInteger remoteLid = new AtomicInteger(LID_MAX);
 
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
     private final AtomicBoolean initConnection = new AtomicBoolean(false);
@@ -62,7 +62,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
             throw new IOException("Unable to move queue pair into RTR state");
         }
 
-        remoteLid = remoteInfo.getLocalId();
+        remoteLid.set(remoteInfo.getLocalId());
 
         LOGGER.info("Moved queue pair into RTR state with remote {}", remoteInfo.getLocalId());
 
@@ -199,17 +199,14 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     }
 
     @Override
-    public short disconnect() throws IOException{
+    public void disconnect() throws IOException{
 
         isConnected.getAndSet(false);
         initConnection.getAndSet(false);
 
-        if(remoteLid == LID_MAX) {
-            return remoteLid;
+        if(remoteLid.getAndSet(LID_MAX) == LID_MAX) {
+            return;
         }
-
-        int oldRemoteLid = remoteLid;
-        remoteLid = LID_MAX;
 
         var message = new Message(getDeviceContext(), MessageType.RC_DISCONNECT, "");
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
@@ -231,9 +228,9 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         boolean isReceived = false;
         while(!isReceived) {
             //LOGGER.debug("POLL disconnect receive {}", oldRemoteLid);
-            var wcs = pollSendCompletions(BATCH_SIZE);
+            var wcs = pollReceiveCompletions(BATCH_SIZE);
             for(int i = 0; i < wcs.getLength(); i++) {
-                if(wcs.get(i).getId() == sendWrId) {
+                if(wcs.get(i).getId() == receiveWrId) {
                     var msg = new Message(receiveBuffer);
                     if(msg.getMessageType() == MessageType.RC_DISCONNECT)
                         isReceived = true;
@@ -251,9 +248,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         init();
 
-        LOGGER.info("Disconnected connection {} from {}", id, oldRemoteLid);
-
-        return remoteLid;
+        LOGGER.info("Disconnected connection {}", id);
     }
 
     @Override
@@ -272,6 +267,10 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
     public boolean isConnected() {
         return isConnected.get();
+    }
+
+    public short getRemoteLocalId() {
+        return (short)remoteLid.get();
     }
 
     @Override

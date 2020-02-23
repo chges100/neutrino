@@ -200,12 +200,15 @@ public class DynamicConnectionManager {
                 throw new IOException();
             }
 
-            short oldRemoteLid = connections[idx].disconnect();
+            short oldRemoteLid = connections[idx].getRemoteLocalId();
 
             if(oldRemoteLid < LID_MAX) {
                 lidToIndex.set(oldRemoteLid, NULL_INDEX);
-                dynamicConnectionHandler.sendMessage(MessageType.DISCONNECT, localId + "", remoteHandlerInfos.get(oldRemoteLid));
+                dynamicConnectionHandler.sendDisconnect(localId, oldRemoteLid);
+                connections[idx].disconnect();
             }
+
+
 
         } catch (Exception e) {
             lru.offer(idx);
@@ -237,7 +240,7 @@ public class DynamicConnectionManager {
 
         try {
             for(var connection : connections) {
-                //connection.disconnect();
+                connection.disconnect();
             }
         } catch (Exception e) {
             LOGGER.error("Could not disconnect all connections: {}", e);
@@ -455,6 +458,11 @@ public class DynamicConnectionManager {
             sendMessage(MessageType.BUFFER_INFO, localId + ":" + bufferInformation.getAddress() + ":" + bufferInformation.getCapacity() + ":" + bufferInformation.getRemoteKey(), remoteHandlerInfos.get(remoteLocalId));
         }
 
+        public void sendDisconnect(short localId, short remoteLocalId) {
+            sendMessage(MessageType.DISCONNECT, localId + "", remoteHandlerInfos.get(remoteLocalId));
+            LOGGER.debug("Send disconnect to {}", remoteLocalId);
+        }
+
         public void sendMessage(MessageType msgType, String payload, UDInformation remoteInfo) {
             var sge = sendSGEProvider.getSGE();
             if(sge == null) {
@@ -470,8 +478,6 @@ public class DynamicConnectionManager {
             sendWorkRequests[(int) workRequest.getId()] = workRequest;
 
             postSend(workRequest);
-
-
         }
 
         public void receiveMessage() {
@@ -656,14 +662,20 @@ public class DynamicConnectionManager {
 
         private void handleDisconnect() {
 
-            // TODO: switch to lock-based
+            // TODO: check if locking is correct
             var remoteLocalId = Short.parseShort(payload);
 
+            LOGGER.debug("Got disconnect from {}", remoteLocalId);
+
             var idx = lidToIndex.getAndSet(remoteLocalId, LID_MAX);
+            long stamp = 0;
             try {
+                stamp = rwLocks[idx].writeLock();
                 connections[idx].disconnect();
             } catch (Exception e) {
                 LOGGER.error("Could not disconnect connection {}", idx);
+            } finally {
+                rwLocks[idx].unlockWrite(stamp);
             }
 
             lru.remove(idx);
