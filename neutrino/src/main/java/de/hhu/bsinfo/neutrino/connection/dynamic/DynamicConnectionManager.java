@@ -161,7 +161,7 @@ public class DynamicConnectionManager {
 
         int idx = lidToIndex.get(remoteLocalId);
 
-        while (remoteBuffers[localId] == null || !connections[idx].isConnected()) {
+        while (remoteBuffers[remoteLocalId] == null || !connections[idx].isConnected()) {
             LockSupport.parkNanos(EXECUTE_POLL_TIME);
         }
 
@@ -186,11 +186,15 @@ public class DynamicConnectionManager {
             }
         } while (!gotID);
 
-        LOGGER.debug("LRU gave index {}", idx);
-
-
         try {
             long stamp = rwLocks[idx].writeLock();
+
+            // check if another thread has already connected to remote
+            if(lidToIndex.get(remoteLocalId) != NULL_INDEX) {
+                throw new IOException();
+            }
+
+            lidToIndex.set(remoteLocalId, idx);
 
             short oldRemoteLid = connections[idx].disconnect();
 
@@ -199,7 +203,7 @@ public class DynamicConnectionManager {
                 dynamicConnectionHandler.sendMessage(MessageType.DISCONNECT, localId + "", remoteHandlerInfos.get(oldRemoteLid));
             }
 
-            lidToIndex.set(remoteLocalId, idx);
+
             var localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
 
             if(answerRequest) {
@@ -220,8 +224,11 @@ public class DynamicConnectionManager {
             }
 
         } catch (Exception e) {
+
+            lru.offer(idx);
             LOGGER.error("Could not create connection to {}\n {}", remoteLocalId, e);
             e.printStackTrace();
+
         } finally {
             if(rwLocks[idx].isWriteLocked()) {
                 rwLocks[idx].tryUnlockWrite();
@@ -627,10 +634,11 @@ public class DynamicConnectionManager {
         private void handleBufferInfo() {
             var split = payload.split(":");
             var bufferInfo = new BufferInformation(Long.parseLong(split[1]), Long.parseLong(split[2]), Integer.parseInt(split[3]));
+            var remoteLid = Short.parseShort(split[0]);
 
-            LOGGER.info("Received new remote buffer information: {}", bufferInfo);
+            LOGGER.info("Received new remote buffer information from {}: {}", remoteLid, bufferInfo);
 
-            remoteBuffers[Short.parseShort(split[0])] = bufferInfo;
+            remoteBuffers[remoteLid] = bufferInfo;
         }
 
         private void handleDisconnect() {
