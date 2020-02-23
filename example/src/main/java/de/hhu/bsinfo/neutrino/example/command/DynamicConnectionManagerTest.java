@@ -40,7 +40,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var manager = new DynamicConnectionManager(port);
 
-        TimeUnit.SECONDS.sleep(3);
+        TimeUnit.SECONDS.sleep(2);
 
         var buffer = manager.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
 
@@ -49,7 +49,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         manager.remoteWriteToAll(buffer, 0, DEFAULT_BUFFER_SIZE);
 
-        TimeUnit.SECONDS.sleep(6);
+        TimeUnit.SECONDS.sleep(3);
 
         manager.shutdown();
 
