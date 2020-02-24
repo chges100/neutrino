@@ -25,6 +25,7 @@ public class BaseMessage<T extends LocalBuffer> implements NativeObject {
         this.byteBuffer = byteBuffer;
 
         this.handle = byteBuffer.getHandle();
+        this.byteBuffer.clear();
 
         this.messageType = new NativeInteger(byteBuffer, 0);
         this.messageType.set(messageType.ordinal());

@@ -201,22 +201,27 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     @Override
     public void disconnect() throws IOException{
 
-        isConnected.getAndSet(false);
-        initConnection.getAndSet(false);
-
-        if(remoteLid.getAndSet(LID_MAX) == LID_MAX) {
+        //either another thread is alreading disconnecting this connection or it is in unconnected state
+        if(!isConnected.getAndSet(false)) {
             return;
         }
 
+        LOGGER.debug("Start to disconnect connection {} to {}", id, remoteLid);
+
+        // set remote LID
+        remoteLid.getAndSet(LID_MAX);
+
+
         var message = new Message(getDeviceContext(), MessageType.RC_DISCONNECT, "");
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
+        receiveBuffer.clear();
 
         var receiveWrId = receive(receiveBuffer);
         var sendWrId = send(message.getByteBuffer());
 
         boolean isSent = false;
         while(!isSent) {
-            //LOGGER.debug("POLL disconnect send {}", oldRemoteLid);
+            //LOGGER.debug("POLL disconnect send");
             var wcs = pollSendCompletions(BATCH_SIZE);
             for(int i = 0; i < wcs.getLength(); i++) {
                 if(wcs.get(i).getId() == sendWrId) {
@@ -227,7 +232,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         boolean isReceived = false;
         while(!isReceived) {
-            //LOGGER.debug("POLL disconnect receive {}", oldRemoteLid);
+            //LOGGER.debug("POLL disconnect receive");
             var wcs = pollReceiveCompletions(BATCH_SIZE);
             for(int i = 0; i < wcs.getLength(); i++) {
                 if(wcs.get(i).getId() == receiveWrId) {
@@ -247,6 +252,9 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         }
 
         init();
+
+        // now connection is ready to be connected
+        initConnection.getAndSet(false);
 
         LOGGER.info("Disconnected connection {}", id);
     }

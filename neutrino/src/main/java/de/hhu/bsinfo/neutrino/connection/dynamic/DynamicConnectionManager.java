@@ -40,7 +40,7 @@ public class DynamicConnectionManager {
     private static final long EXECUTE_POLL_TIME = 1000;
     private static final long IDX_POLL_TIME = 1000;
     private static final int LOCAL_BUFFER_READ = 19;
-    private static final int MAX_CONNECTONS = 3;
+    private static final int MAX_CONNECTONS = 1;
     private static final int NULL_INDEX = Integer.MAX_VALUE;
     private static final short LID_MAX = Short.MAX_VALUE;
 
@@ -161,8 +161,10 @@ public class DynamicConnectionManager {
             } catch (IndexOutOfBoundsException e) {
                 idx = createConnection(remoteLocalId);
 
-                var localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
-                dynamicConnectionHandler.sendConnectionRequest(localQPInfo, remoteLocalId);
+                if(idx < NULL_INDEX) {
+                    var localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
+                    dynamicConnectionHandler.sendConnectionRequest(localQPInfo, remoteLocalId);
+                }
             }
         }
 
@@ -177,10 +179,8 @@ public class DynamicConnectionManager {
     }
 
     private int createConnection(short remoteLocalId) {
-
-        LOGGER.debug("Begin to create connection to {}", remoteLocalId);
-
         int idx = NULL_INDEX;
+        long stamp = 0;
 
         // if no ids are available poll
         boolean gotID;
@@ -194,8 +194,10 @@ public class DynamicConnectionManager {
             }
         } while (!gotID);
 
+        int ret_idx = idx;
+
         try {
-            long stamp = rwLocks[idx].writeLock();
+            stamp = rwLocks[idx].writeLock();
 
             // check if another thread has already connected to remote
             var oldIdx = lidToIndex.compareAndExchange(remoteLocalId, NULL_INDEX, idx);
@@ -206,24 +208,26 @@ public class DynamicConnectionManager {
             short oldRemoteLid = connections[idx].getRemoteLocalId();
 
             if(oldRemoteLid < LID_MAX) {
-                lidToIndex.set(oldRemoteLid, NULL_INDEX);
+                lidToIndex.compareAndSet(oldRemoteLid, idx, NULL_INDEX);
                 dynamicConnectionHandler.sendDisconnect(localId, oldRemoteLid);
                 connections[idx].disconnect();
             }
 
         } catch (Exception e) {
             lru.offer(idx);
-            idx = NULL_INDEX;
+            ret_idx = NULL_INDEX;
             LOGGER.error("Could not create connection to {}\n {}", remoteLocalId, e);
             //e.printStackTrace();
 
         } finally {
-            if(rwLocks[idx].isWriteLocked()) {
-                rwLocks[idx].tryUnlockWrite();
-            }
+            rwLocks[idx].unlockWrite(stamp);
         }
 
-        return idx;
+        if(idx < NULL_INDEX) {
+            LOGGER.debug("Created connection {} to {}", connections[idx].getId(), remoteLocalId);
+        }
+
+        return ret_idx;
     }
 
     public RegisteredBuffer allocRegisteredBuffer(int deviceId, long size) {
@@ -248,9 +252,9 @@ public class DynamicConnectionManager {
         }
 
 
-        printRemoteDCHInfos();
-        printRCInfos();
-        printRemoteBufferInfos();
+        //printRemoteDCHInfos();
+        //printRCInfos();
+        //printRemoteBufferInfos();
         printLocalBufferInfos();
     }
 
@@ -360,7 +364,7 @@ public class DynamicConnectionManager {
                         dynamicConnectionHandler.sendBufferInfo(bufferInfo, localId, remoteLocalId);
                     }
 
-                    LOGGER.info("UDP: Add new remote connection handler {}", remoteInfo);
+                    LOGGER.trace("UDP: Add new remote connection handler {}", remoteInfo);
                 }
             }
         }
@@ -601,7 +605,7 @@ public class DynamicConnectionManager {
             var remoteInfo = new RCInformation(Byte.parseByte(split[0]), Short.parseShort(split[1]), Integer.parseInt(split[2]));
             var remoteLocalId = remoteInfo.getLocalId();
 
-            LOGGER.info("Got new connection request from {}", remoteInfo);
+            LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
 
             long stamp = 0;
@@ -673,8 +677,11 @@ public class DynamicConnectionManager {
             try {
                 stamp = rwLocks[idx].writeLock();
                 connections[idx].disconnect();
+            } catch (IndexOutOfBoundsException e) {
+                LOGGER.debug("Connection to {} is already disconnected", remoteLocalId);
             } catch (Exception e) {
                 LOGGER.error("Could not disconnect connection {}", idx);
+                e.printStackTrace();
             } finally {
                 rwLocks[idx].unlockWrite(stamp);
             }
