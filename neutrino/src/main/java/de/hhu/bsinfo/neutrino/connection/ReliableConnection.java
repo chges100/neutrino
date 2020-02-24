@@ -53,8 +53,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     public void connect(RCInformation remoteInfo) throws IOException {
 
         if(initConnection.getAndSet(true)){
-            LOGGER.error("Connection already connected");
-            throw new IOException("Connection is already connected");
+            throw new IOException("Connection is already connected to " + remoteLid);
         }
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToReceiveAttributesRC(
@@ -73,7 +72,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         LOGGER.info("Moved queue pair into RTS state");
 
         // TODO: not necessary?
-        //initialHandshake();
+        initialHandshake();
 
         isConnected.getAndSet(true);
     }
@@ -206,7 +205,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
             return;
         }
 
-        LOGGER.debug("Start to disconnect connection {} to {}", id, remoteLid);
+        LOGGER.debug("Start to disconnect connection {} from {}", id, remoteLid);
 
         // set remote LID
         remoteLid.getAndSet(LID_MAX);
