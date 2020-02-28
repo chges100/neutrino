@@ -18,15 +18,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ReliableConnection extends QPSocket implements Connectable<RCInformation>, Executor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
-    private static final short LID_MAX = Short.MAX_VALUE;
+    private static final short INVALID_LID = Short.MAX_VALUE;
     private static final int BATCH_SIZE = 10;
 
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private final int id;
-    private AtomicInteger remoteLid = new AtomicInteger(LID_MAX);
+    private AtomicInteger remoteLid = new AtomicInteger(INVALID_LID);
 
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
-    private final AtomicBoolean initConnection = new AtomicBoolean(false);
+    private final AtomicBoolean changeConnection = new AtomicBoolean(false);
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
@@ -52,16 +52,14 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     @Override
     public void connect(RCInformation remoteInfo) throws IOException {
 
-        if(initConnection.getAndSet(true)){
-            throw new IOException("Connection is already connected to " + remoteLid);
+        if(changeConnection.getAndSet(true)){
+            throw new IOException("Connection is already changing or set up tp remote " + remoteLid);
         }
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToReceiveAttributesRC(
                 remoteInfo.getQueuePairNumber(), remoteInfo.getLocalId(), remoteInfo.getPortNumber()))) {
             throw new IOException("Unable to move queue pair into RTR state");
         }
-
-        remoteLid.set(remoteInfo.getLocalId());
 
         LOGGER.info("Moved queue pair into RTR state with remote {}", remoteInfo.getLocalId());
 
@@ -72,8 +70,9 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         LOGGER.info("Moved queue pair into RTS state");
 
         // TODO: not necessary?
-        initialHandshake();
+        //initialHandshake();
 
+        remoteLid.set(remoteInfo.getLocalId());
         isConnected.getAndSet(true);
     }
 
@@ -208,7 +207,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         LOGGER.debug("Start to disconnect connection {} from {}", id, remoteLid);
 
         // set remote LID
-        remoteLid.getAndSet(LID_MAX);
+        remoteLid.getAndSet(INVALID_LID);
 
 
         var message = new Message(getDeviceContext(), MessageType.RC_DISCONNECT, "");
@@ -253,7 +252,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         init();
 
         // now connection is ready to be connected
-        initConnection.getAndSet(false);
+        changeConnection.getAndSet(false);
 
         LOGGER.info("Disconnected connection {}", id);
     }
