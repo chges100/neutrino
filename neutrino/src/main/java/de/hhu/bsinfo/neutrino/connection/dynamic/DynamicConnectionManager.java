@@ -176,13 +176,13 @@ public class DynamicConnectionManager {
                     rwLocks[idx].unlockRead(stamp);
                     stamp = 0;
                 }
-            } else {
+
                 // check if connection is already established and send connection message if necesaary
                 if(!connections[idx].isConnected()) {
                     var localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
                     dynamicConnectionHandler.sendConnectionRequest(localQPInfo, remoteLocalId);
                 }
-
+            } else {
                 // wait for connection to be established or reset after max poll time
                 long startPoll = System.currentTimeMillis();
 
@@ -194,7 +194,7 @@ public class DynamicConnectionManager {
                         stamp = 0;
                         break;
                     }
-                    LOGGER.error("POLL execute is connected");
+                    //LOGGER.error("POLL execute is connected");
                     //LockSupport.parkNanos(EXECUTE_POLL_TIME);
                 }
             }
@@ -217,7 +217,7 @@ public class DynamicConnectionManager {
         // poll for id of connection to be set up
         boolean gotID;
         do{
-            LOGGER.error("POLL create con start");
+            //LOGGER.error("POLL create con start");
             try {
                 idx = lru.poll();
                 gotID = true;
@@ -237,7 +237,7 @@ public class DynamicConnectionManager {
             stamp = rwLocks[idx].writeLock();
 
             // check if another thread has already connected to remote
-            if(lidToIndex.compareAndSet(remoteLocalId, INVALID_INDEX, idx)) {
+            if(!lidToIndex.compareAndSet(remoteLocalId, INVALID_INDEX, idx)) {
                 throw new IOException("Connection to remote is already created");
             }
 
@@ -647,7 +647,7 @@ public class DynamicConnectionManager {
             int idx = INVALID_INDEX;
 
             while (stamp == 0) {
-                LOGGER.error("POLL handle connection request");
+                //LOGGER.error("POLL handle connection request");
                 try {
                     idx = lidToIndex.get(remoteLocalId);
                     stamp = rwLocks[idx].readLock();
