@@ -286,15 +286,23 @@ public class DynamicConnectionManager {
             LOGGER.error("Could not disconnect all connections: {}", e);
         }
 
-
-        //printRemoteDCHInfos();
-        //printRCInfos();
-        //printRemoteBufferInfos();
         printLocalBufferInfos();
     }
 
     public short getLocalId() {
         return localId;
+    }
+
+    public short[] getRemoteLocalIds() {
+        var n = remoteHandlerInfos.size();
+        var remotes = remoteHandlerInfos.keySet().toArray();
+        short[] lids = new short[n];
+
+        for(int i = 0; i < lids.length; i++) {
+            lids[i] = (short) remotes[i];
+        }
+
+        return lids;
     }
 
     public void printRemoteDCHInfos() {

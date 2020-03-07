@@ -53,7 +53,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     public void connect(RCInformation remoteInfo) throws IOException {
 
         if(changeConnection.getAndSet(true)){
-            throw new IOException("Connection is already changing or set up tp remote " + remoteLid);
+            throw new IOException("Connection is already changing or set up to remote " + remoteLid);
         }
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToReceiveAttributesRC(
@@ -68,9 +68,6 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         }
 
         LOGGER.info("Moved queue pair into RTS state");
-
-        // TODO: not necessary?
-        //initialHandshake();
 
         remoteLid.set(remoteInfo.getLocalId());
         isConnected.getAndSet(true);
@@ -199,16 +196,15 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     @Override
     public void disconnect() throws IOException{
 
-        //either another thread is alreading disconnecting this connection or it is in unconnected state
+        // either another thread is alreading disconnecting this connection or it is in unconnected state
         if(!isConnected.getAndSet(false)) {
-            return;
+            throw new IOException("Connection already disconnecting or disconnected");
         }
-
-        LOGGER.debug("Start to disconnect connection {} from {}", id, remoteLid);
 
         // set remote LID
         remoteLid.getAndSet(INVALID_LID);
 
+        LOGGER.debug("Start to disconnect connection {} from {}", id, remoteLid);
 
         var message = new Message(getDeviceContext(), MessageType.RC_DISCONNECT, "");
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
