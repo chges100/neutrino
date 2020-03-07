@@ -1,5 +1,7 @@
 package de.hhu.bsinfo.neutrino.connection.util;
 
+import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
+
 import java.nio.ByteBuffer;
 import java.util.StringJoiner;
 
@@ -15,6 +17,12 @@ public class RCInformation {
         this.portNumber = portNumber;
         this.localId = localId;
         this.queuePairNumber = queuePairNumber;
+    }
+
+    public RCInformation(ReliableConnection connection) {
+        this.portNumber = (byte) 1;
+        this.localId = connection.getPortAttributes().getLocalId();
+        this.queuePairNumber = connection.getQueuePair().getQueuePairNumber();
     }
 
     public RCInformation(ByteBuffer buffer) {

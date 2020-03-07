@@ -25,6 +25,7 @@ import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -61,7 +62,7 @@ public class DynamicConnectionManager {
     private long connectionDuration[];
     private final StampedLock rwLocks[];
 
-    private final ConcurrentLinkedQueue<Integer> lru;
+    private final ArrayBlockingQueue<Integer> lru;
     private final BufferInformation remoteBuffers[];
     private final RegisteredBuffer localBuffers[];
 
@@ -106,13 +107,14 @@ public class DynamicConnectionManager {
         connections = new ReliableConnection[MAX_CONNECTONS];
         connectionDuration = new long[MAX_CONNECTONS];
         rwLocks = new StampedLock[MAX_CONNECTONS];
-        lru = new ConcurrentLinkedQueue<>();
+        lru = new ArrayBlockingQueue<>(MAX_CONNECTONS);
 
         for(int i = 0; i < MAX_CONNECTONS; i++) {
             connections[i] = new ReliableConnection(deviceContexts.get(0));
             connections[i].init();
 
             rwLocks[i] = new StampedLock();
+            connectionDuration[i] = 0;
 
             lru.offer(i);
         }
@@ -155,52 +157,13 @@ public class DynamicConnectionManager {
     }
 
     private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, short remoteLocalId) {
-        long stamp = 0;
-        int idx = 0;
-        boolean isConnected = false;
+        long stamp = readLockConnection(remoteLocalId);
 
-        // poll for valid index of connection and read-lock
-        while(!isConnected) {
-            LOGGER.error("POLL execute start");
-            idx = lidToIndex.get(remoteLocalId);
+        var idx = lidToIndex.get(remoteLocalId);
 
-            // if index is invalid, then no connection to remote exists
-            if(idx == INVALID_INDEX) {
-                createConnection(remoteLocalId);
-            } else  if(stamp == 0){
-                // else read lock connection
-                stamp = rwLocks[idx].readLock();
-
-                // and check if this is still the right idx
-                if(lidToIndex.get(remoteLocalId) != idx) {
-                    rwLocks[idx].unlockRead(stamp);
-                    stamp = 0;
-                }
-
-                // check if connection is already established and send connection message if necesaary
-                if(!connections[idx].isConnected()) {
-                    var localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
-                    dynamicConnectionHandler.sendConnectionRequest(localQPInfo, remoteLocalId);
-                }
-            } else {
-                // wait for connection to be established or reset after max poll time
-                long startPoll = System.currentTimeMillis();
-
-                while (!isConnected) {
-                    isConnected = connections[idx].isConnected();
-
-                    if(System.currentTimeMillis() - startPoll > MAX_POLL_TIME) {
-                        rwLocks[idx].unlockRead(stamp);
-                        stamp = 0;
-                        break;
-                    }
-                    //LOGGER.error("POLL execute is connected");
-                    //LockSupport.parkNanos(EXECUTE_POLL_TIME);
-                }
-            }
+        while (!connections[idx].isConnected()) {
+            LockSupport.parkNanos(EXECUTE_POLL_TIME);
         }
-
-
 
         // perform operation
         LOGGER.debug("Execute remote RDMA operation on {}", connections[idx].getRemoteLocalId());
@@ -210,59 +173,74 @@ public class DynamicConnectionManager {
         rwLocks[idx].unlockRead(stamp);
     }
 
-    private void createConnection(short remoteLocalId) {
-        int idx = INVALID_INDEX;
+    private long readLockConnection (short remoteLocalId) {
         long stamp = 0;
 
-        // poll for id of connection to be set up
-        boolean gotID;
-        do{
-            //LOGGER.error("POLL create con start");
-            try {
-                idx = lru.poll();
-                gotID = true;
-            } catch (NullPointerException e) {
-                gotID = false;
-                LockSupport.parkNanos(IDX_POLL_TIME);
+        LOGGER.debug("TRY {}", remoteLocalId);
+
+        while(stamp == 0) {
+            var idx = lidToIndex.get(remoteLocalId);
+
+            if(idx == INVALID_INDEX) {
+                LOGGER.debug("START CONNECT {}", remoteLocalId);
+                stamp = createConnection(remoteLocalId);
+            } else {
+                stamp = rwLocks[idx].readLock();
+                LOGGER.debug("STAMP {}", stamp);
             }
-        } while (!gotID);
+
+        }
+        LOGGER.debug("RETURN {}", remoteLocalId);
+        return stamp;
+    }
+
+    private long createConnection(short remoteLocalId) {
+        long stamp = 0;
+        int idx = 0;
 
         try {
-            // make sure that this connection was alive long enough
-            long duration = System.currentTimeMillis() - connectionDuration[idx];
-            if(duration < MIN_CONNECTION_DURATION) {
-                LockSupport.parkNanos((MIN_CONNECTION_DURATION - duration) * 1000000);
-            }
+            // get next index
+            idx = lru.take();
 
             stamp = rwLocks[idx].writeLock();
 
-            // check if another thread has already connected to remote
+            // insert new connection index
             if(!lidToIndex.compareAndSet(remoteLocalId, INVALID_INDEX, idx)) {
-                throw new IOException("Connection to remote is already created");
+                throw new IOException("There is already another connection to remote " + remoteLocalId + "\n");
             }
 
-            short oldRemoteLid = connections[idx].getRemoteLocalId();
+            // disconnect from old remote
+            var oldRemoteLid = connections[idx].getRemoteLocalId();
+            if(oldRemoteLid != INVALID_LID) {
+                // ensure that connection was established long enough
+                long duration = System.currentTimeMillis() - connectionDuration[idx];
+                if(duration < MIN_CONNECTION_DURATION) {
+                    LockSupport.parkNanos((MIN_CONNECTION_DURATION - duration) * 1000000);
+                }
 
-            if(oldRemoteLid < INVALID_LID) {
                 lidToIndex.compareAndSet(oldRemoteLid, idx, INVALID_INDEX);
-                dynamicConnectionHandler.sendDisconnect(localId, oldRemoteLid);
+                dynamicConnectionHandler.sendDisconnect(localId, remoteLocalId);
                 connections[idx].disconnect();
             }
 
-            connectionDuration[idx] = System.currentTimeMillis();
+            dynamicConnectionHandler.sendConnectionRequest(new RCInformation(connections[idx]), remoteLocalId);
 
-        } catch (Exception e) {
-            lru.offer(idx);
-            LOGGER.error("Could not create connection to {}\n {}", remoteLocalId, e);
-            //e.printStackTrace();
-
-        } finally {
+        } catch (InterruptedException e) {
+            LOGGER.debug("Could not receive connection index to create connection to remote {}", remoteLocalId);
+            return 0;
+        } catch (IOException e) {
+            LOGGER.debug("Could not create connection to {}\n{}", remoteLocalId, e);
             rwLocks[idx].unlockWrite(stamp);
+            return 0;
         }
 
-        if(idx < INVALID_INDEX) {
-            LOGGER.debug("Created connection {} to {}", connections[idx].getId(), remoteLocalId);
-        }
+        lru.offer(idx);
+
+        LOGGER.debug("CREATED {}", remoteLocalId);
+
+        rwLocks[idx].tryConvertToReadLock(stamp);
+
+        return stamp;
     }
 
     public RegisteredBuffer allocRegisteredBuffer(int deviceId, long size) {
@@ -651,38 +629,17 @@ public class DynamicConnectionManager {
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
 
-            long stamp = 0;
-            int idx = INVALID_INDEX;
+            var stamp = readLockConnection(remoteLocalId);
+            var idx = lidToIndex.get(remoteLocalId);
 
-            while (stamp == 0) {
-                //LOGGER.error("POLL handle connection request");
-                try {
-                    idx = lidToIndex.get(remoteLocalId);
-                    stamp = rwLocks[idx].readLock();
-                    var connectionRemoteLocalId = connections[idx].getRemoteLocalId();
-
-                    // check if this connection is still assigned to correct remote
-                    if(connectionRemoteLocalId != remoteLocalId && connectionRemoteLocalId != INVALID_LID) {
-                        rwLocks[idx].unlockRead(stamp);
-                        stamp = 0;
-                    } else {
-                        var localQPInfo = new RCInformation((byte) 1, connections[idx].getPortAttributes().getLocalId(), connections[idx].getQueuePair().getQueuePairNumber());
-                        dynamicConnectionHandler.answerConnectionRequest(localQPInfo, remoteHandlerInfos.get(remoteLocalId));
-
-                        if(connectionRemoteLocalId == INVALID_LID) {
-                            connections[idx].connect(remoteInfo);
-                            lru.offer(idx);
-                        }
-
-                        rwLocks[idx].unlockRead(stamp);
-                    }
-
-                } catch (IndexOutOfBoundsException e) {
-                    createConnection(remoteLocalId);
-                } catch (IOException e) {
-                    LOGGER.debug("Could not connect to {}\n {}", remoteLocalId, e);
-                }
+            try {
+                connections[idx].connect(remoteInfo);
+                connectionDuration[idx] = System.currentTimeMillis();
+            } catch (IOException e) {
+                LOGGER.debug("Could not connect to remote {}\n{}", remoteLocalId, e);
             }
+
+            rwLocks[idx].unlockRead(stamp);
         }
 
         private void handleConnectionAck() {
@@ -698,6 +655,7 @@ public class DynamicConnectionManager {
                 stamp = rwLocks[idx].readLock();
 
                 connections[idx].connect(remoteInfo);
+                LOGGER.debug("CONNECT {}", remoteInfo.getLocalId());
                 lru.offer(idx);
 
             } catch (Exception e) {

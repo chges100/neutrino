@@ -69,6 +69,8 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         LOGGER.info("Moved queue pair into RTS state");
 
+        //initialHandshake();
+
         remoteLid.set(remoteInfo.getLocalId());
         isConnected.getAndSet(true);
     }
