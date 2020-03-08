@@ -38,11 +38,9 @@ public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
     private static final long BUFFER_SIZE = 1024*1024;
-    private static final long EXECUTE_POLL_TIME = 1000;
-    private static final long MAX_POLL_TIME = 500;
-    private static final long IDX_POLL_TIME = 1000;
+    private static final long EXECUTE_POLL_TIME = 10000;
     private static final int LOCAL_BUFFER_READ = 19;
-    private static final long MIN_CONNECTION_DURATION = 10;
+    private static final long MIN_CONNECTION_DURATION = 100;
     private static final int MAX_CONNECTONS = 1;
     private static final int INVALID_INDEX = Integer.MAX_VALUE;
     private static final short INVALID_LID = Short.MAX_VALUE;
@@ -157,12 +155,21 @@ public class DynamicConnectionManager {
     }
 
     private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, short remoteLocalId) {
-        long stamp = readLockConnection(remoteLocalId);
+        boolean connected = false;
+        long stamp = 0;
+        int idx = 0;
 
-        var idx = lidToIndex.get(remoteLocalId);
+        while(!connected) {
+            stamp = readLockConnection(remoteLocalId);
 
-        while (!connections[idx].isConnected()) {
-            LockSupport.parkNanos(EXECUTE_POLL_TIME);
+            idx = lidToIndex.get(remoteLocalId);
+
+            connected = connections[idx].isConnected();
+
+            if(!connected) {
+                rwLocks[idx].unlockRead(stamp);
+                LockSupport.parkNanos(EXECUTE_POLL_TIME * 100);
+            }
         }
 
         // perform operation
@@ -176,21 +183,17 @@ public class DynamicConnectionManager {
     private long readLockConnection (short remoteLocalId) {
         long stamp = 0;
 
-        LOGGER.debug("TRY {}", remoteLocalId);
-
         while(stamp == 0) {
             var idx = lidToIndex.get(remoteLocalId);
 
             if(idx == INVALID_INDEX) {
-                LOGGER.debug("START CONNECT {}", remoteLocalId);
                 stamp = createConnection(remoteLocalId);
             } else {
                 stamp = rwLocks[idx].readLock();
-                LOGGER.debug("STAMP {}", stamp);
             }
 
         }
-        LOGGER.debug("RETURN {}", remoteLocalId);
+
         return stamp;
     }
 
@@ -219,7 +222,7 @@ public class DynamicConnectionManager {
                 }
 
                 lidToIndex.compareAndSet(oldRemoteLid, idx, INVALID_INDEX);
-                dynamicConnectionHandler.sendDisconnect(localId, remoteLocalId);
+                dynamicConnectionHandler.sendDisconnect(localId, oldRemoteLid);
                 connections[idx].disconnect();
             }
 
@@ -231,14 +234,13 @@ public class DynamicConnectionManager {
         } catch (IOException e) {
             LOGGER.debug("Could not create connection to {}\n{}", remoteLocalId, e);
             rwLocks[idx].unlockWrite(stamp);
+            lru.offer(idx);
             return 0;
         }
 
         lru.offer(idx);
 
-        LOGGER.debug("CREATED {}", remoteLocalId);
-
-        rwLocks[idx].tryConvertToReadLock(stamp);
+        stamp = rwLocks[idx].tryConvertToReadLock(stamp);
 
         return stamp;
     }
@@ -631,14 +633,16 @@ public class DynamicConnectionManager {
 
             var stamp = readLockConnection(remoteLocalId);
             var idx = lidToIndex.get(remoteLocalId);
+            LOGGER.debug("READLOCKED CONN IDX {} STAMP {}", stamp, idx);
 
             try {
                 connections[idx].connect(remoteInfo);
+                LOGGER.debug("CONNECTED");
                 connectionDuration[idx] = System.currentTimeMillis();
             } catch (IOException e) {
                 LOGGER.debug("Could not connect to remote {}\n{}", remoteLocalId, e);
             }
-
+            LOGGER.debug("UNLOCK");
             rwLocks[idx].unlockRead(stamp);
         }
 
@@ -683,7 +687,7 @@ public class DynamicConnectionManager {
 
             LOGGER.debug("Got disconnect from {}", remoteLocalId);
 
-            var idx = lidToIndex.getAndSet(remoteLocalId, INVALID_INDEX);
+            var idx = lidToIndex.get(remoteLocalId);
             long stamp = 0;
             try {
                 // make sure that this connection was alive long enough
@@ -693,7 +697,10 @@ public class DynamicConnectionManager {
                 }
 
                 stamp = rwLocks[idx].writeLock();
-                connections[idx].disconnect();
+                if(lidToIndex.compareAndSet(remoteLocalId, idx, INVALID_INDEX)) {
+                    connections[idx].disconnect();
+                }
+
             } catch (IndexOutOfBoundsException e) {
                 LOGGER.debug("Connection to {} is already disconnected", remoteLocalId);
             } catch (Exception e) {
@@ -703,8 +710,8 @@ public class DynamicConnectionManager {
                 rwLocks[idx].unlockWrite(stamp);
             }
 
-            lru.remove(idx);
-            lru.add(idx);
+            //lru.remove(idx);
+            //lru.add(idx);
         }
     }
 }
