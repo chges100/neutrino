@@ -9,6 +9,7 @@ import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.LocalMessage;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
+import de.hhu.bsinfo.neutrino.connection.util.Pair;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.connection.util.SGEProvider;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
@@ -173,7 +174,7 @@ public class DynamicConnectionManager {
         }
 
         // perform operation
-        LOGGER.debug("Execute remote RDMA operation on {}", connections[idx].getRemoteLocalId());
+        LOGGER.debug("Execute remote RDMA operation on {}, should be on {}", connections[idx].getRemoteLocalId(), remoteLocalId);
         connections[idx].execute(data, opCode, offset, length, remoteBuffers[remoteLocalId].getAddress(), remoteBuffers[remoteLocalId].getRemoteKey(), 0);
 
         // release lock
@@ -182,15 +183,22 @@ public class DynamicConnectionManager {
 
     private long readLockConnection (short remoteLocalId) {
         long stamp = 0;
+        int idx = 0;
 
         while(stamp == 0) {
-            var idx = lidToIndex.get(remoteLocalId);
+            idx = lidToIndex.get(remoteLocalId);
 
             if(idx == INVALID_INDEX) {
                 stamp = createConnection(remoteLocalId);
             } else {
                 stamp = rwLocks[idx].readLock();
+
+                /*if(lidToIndex.get(remoteLocalId) != INVALID_INDEX) {
+                    rwLocks[idx].unlockRead(stamp);
+                    stamp = 0;
+                }*/
             }
+
 
         }
 
@@ -201,9 +209,13 @@ public class DynamicConnectionManager {
         long stamp = 0;
         int idx = 0;
 
+        LOGGER.debug("CREATE TO {}", remoteLocalId);
+
         try {
             // get next index
             idx = lru.take();
+            LOGGER.debug("CREATE: GOT IDX {} TO {}", idx, remoteLocalId);
+
 
             stamp = rwLocks[idx].writeLock();
 
@@ -215,6 +227,8 @@ public class DynamicConnectionManager {
             // disconnect from old remote
             var oldRemoteLid = connections[idx].getRemoteLocalId();
             if(oldRemoteLid != INVALID_LID) {
+                LOGGER.debug("PREP DISCON FROM {} FOR IDX {} TO {}", oldRemoteLid, idx, remoteLocalId);
+
                 // ensure that connection was established long enough
                 long duration = System.currentTimeMillis() - connectionDuration[idx];
                 if(duration < MIN_CONNECTION_DURATION) {
@@ -238,9 +252,8 @@ public class DynamicConnectionManager {
             return 0;
         }
 
-        lru.offer(idx);
-
         stamp = rwLocks[idx].tryConvertToReadLock(stamp);
+        LOGGER.debug("CREATE: RETURN STAMP {} TO {}", stamp, remoteLocalId);
 
         return stamp;
     }
@@ -260,7 +273,9 @@ public class DynamicConnectionManager {
 
         try {
             for(var connection : connections) {
-                connection.disconnect();
+                if(connection.isConnected()) {
+                    connection.disconnect();
+                }
             }
         } catch (Exception e) {
             LOGGER.error("Could not disconnect all connections: {}", e);
@@ -633,16 +648,16 @@ public class DynamicConnectionManager {
 
             var stamp = readLockConnection(remoteLocalId);
             var idx = lidToIndex.get(remoteLocalId);
-            LOGGER.debug("READLOCKED CONN IDX {} STAMP {}", stamp, idx);
+            LOGGER.debug("CON_REQ WITH IDX {} and STMP {} FROM {}", idx, stamp, remoteLocalId);
 
             try {
+                LOGGER.debug("CON_REQ START CONNECT IDX {} TO {}", idx, remoteLocalId);
                 connections[idx].connect(remoteInfo);
-                LOGGER.debug("CONNECTED");
                 connectionDuration[idx] = System.currentTimeMillis();
+                lru.offer(idx);
             } catch (IOException e) {
                 LOGGER.debug("Could not connect to remote {}\n{}", remoteLocalId, e);
             }
-            LOGGER.debug("UNLOCK");
             rwLocks[idx].unlockRead(stamp);
         }
 
