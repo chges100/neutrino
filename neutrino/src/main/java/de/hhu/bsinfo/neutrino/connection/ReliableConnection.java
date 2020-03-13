@@ -87,7 +87,11 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, sendWrIdProvider.getAndIncrement());
 
-        return postSend(sendWorkRequest);
+        var wrId = postSend(sendWorkRequest);
+
+        scatterGatherElement.releaseInstance();
+
+        return wrId;
     }
 
     protected SendWorkRequest buildSendWorkRequest(ScatterGatherElement sge, int id) {
@@ -103,7 +107,11 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         var sendWorkRequest = buildRDMAWorkRequest(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey, sendWrIdProvider.getAndIncrement());
 
-        return postSend(sendWorkRequest);
+        var wrId = postSend(sendWorkRequest);
+
+        scatterGatherElement.releaseInstance();
+
+        return wrId;
     }
 
     protected SendWorkRequest buildRDMAWorkRequest(SendWorkRequest.OpCode opCode, ScatterGatherElement sge, long remoteAddress, int remoteKey, int id) {
@@ -121,7 +129,12 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
         var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, receiveWrIdProvider.getAndIncrement());
-        return postReceive(receiveWorkRequest);
+
+        var wrId = postReceive(receiveWorkRequest);
+
+        scatterGatherElement.releaseInstance();
+
+        return wrId;
     }
 
     protected ReceiveWorkRequest buildReceiveWorkRequest(ScatterGatherElement sge, int id) {

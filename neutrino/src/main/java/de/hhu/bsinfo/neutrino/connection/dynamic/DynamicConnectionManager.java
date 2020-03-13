@@ -76,6 +76,8 @@ public class DynamicConnectionManager {
     public DynamicConnectionManager(int port) throws IOException {
         LOGGER.info("Initialize dynamic connection handler");
 
+        LOGGER.debug("TADAAAAAA");
+
         deviceContexts = new ArrayList<>();
         remoteHandlerInfos = new HashMap<>();
 
@@ -177,6 +179,21 @@ public class DynamicConnectionManager {
         LOGGER.debug("Execute remote RDMA operation on {}, should be on {}", connections[idx].getRemoteLocalId(), remoteLocalId);
         connections[idx].execute(data, opCode, offset, length, remoteBuffers[remoteLocalId].getAddress(), remoteBuffers[remoteLocalId].getRemoteKey(), 0);
 
+        int poll = 0;
+
+        while(poll == 0) {
+            try {
+                //LOGGER.debug("POLL");
+                poll = connections[idx].pollSend(1);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        }
+
+        LOGGER.debug("REMOTE EXECUTION COMPLETE");
+
+
         // release lock
         rwLocks[idx].unlockRead(stamp);
     }
@@ -193,10 +210,10 @@ public class DynamicConnectionManager {
             } else {
                 stamp = rwLocks[idx].readLock();
 
-                /*if(lidToIndex.get(remoteLocalId) != INVALID_INDEX) {
+                if(lidToIndex.get(remoteLocalId) == INVALID_INDEX) {
                     rwLocks[idx].unlockRead(stamp);
                     stamp = 0;
-                }*/
+                }
             }
 
 
@@ -216,6 +233,10 @@ public class DynamicConnectionManager {
             idx = lru.take();
             LOGGER.debug("CREATE: GOT IDX {} TO {}", idx, remoteLocalId);
 
+            if(System.currentTimeMillis() - connectionDuration[idx] < MIN_CONNECTION_DURATION) {
+                return 0;
+            }
+
 
             stamp = rwLocks[idx].writeLock();
 
@@ -228,12 +249,6 @@ public class DynamicConnectionManager {
             var oldRemoteLid = connections[idx].getRemoteLocalId();
             if(oldRemoteLid != INVALID_LID) {
                 LOGGER.debug("PREP DISCON FROM {} FOR IDX {} TO {}", oldRemoteLid, idx, remoteLocalId);
-
-                // ensure that connection was established long enough
-                long duration = System.currentTimeMillis() - connectionDuration[idx];
-                if(duration < MIN_CONNECTION_DURATION) {
-                    LockSupport.parkNanos((MIN_CONNECTION_DURATION - duration) * 1000000);
-                }
 
                 lidToIndex.compareAndSet(oldRemoteLid, idx, INVALID_INDEX);
                 dynamicConnectionHandler.sendDisconnect(localId, oldRemoteLid);
@@ -708,7 +723,7 @@ public class DynamicConnectionManager {
                 // make sure that this connection was alive long enough
                 long duration = System.currentTimeMillis() - connectionDuration[idx];
                 if(duration < MIN_CONNECTION_DURATION) {
-                    LockSupport.parkNanos((MIN_CONNECTION_DURATION - duration) * 1000000);
+                    Thread.sleep(MIN_CONNECTION_DURATION - duration);
                 }
 
                 stamp = rwLocks[idx].writeLock();

@@ -59,7 +59,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             workloads[i].start();
         }
 
-        TimeUnit.SECONDS.sleep(4);
+        TimeUnit.SECONDS.sleep(8);
 
         for(int i = 0; i< remoteLids.length; i++) {
             workloads[i].stop();
@@ -88,8 +88,9 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         @Override
         public void run() {
+            LOGGER.debug("TRY REMOTE WRITE {}", remoteLocalId);
             manager.remoteWrite(data, offset, DEFAULT_BUFFER_SIZE, remoteLocalId);
-            LOGGER.info("Remote write complete");
+            LOGGER.info("Remote write complete {}", remoteLocalId);
         }
     }
 }
