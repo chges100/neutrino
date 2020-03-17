@@ -69,7 +69,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         LOGGER.info("Moved queue pair into RTS state");
 
-        initialHandshake();
+        //initialHandshake();
 
         remoteLid.set(remoteInfo.getLocalId());
         isConnected.getAndSet(true);
@@ -231,7 +231,6 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         boolean isSent = false;
         while(!isSent) {
-            //LOGGER.debug("POLL disconnect send");
             var wcs = pollSendCompletions(BATCH_SIZE);
             for(int i = 0; i < wcs.getLength(); i++) {
                 if(wcs.get(i).getId() == sendWrId) {
@@ -242,7 +241,6 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         boolean isReceived = false;
         while(!isReceived) {
-            //LOGGER.debug("POLL disconnect receive");
             var wcs = pollReceiveCompletions(BATCH_SIZE);
             for(int i = 0; i < wcs.getLength(); i++) {
                 if(wcs.get(i).getId() == receiveWrId) {

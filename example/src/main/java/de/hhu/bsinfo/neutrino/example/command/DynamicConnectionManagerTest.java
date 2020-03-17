@@ -4,17 +4,13 @@ import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManagerOld;
 import de.hhu.bsinfo.neutrino.data.NativeString;
-import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.StampedLock;
+
 
 @CommandLine.Command(
         name = "dyn-con-test",
@@ -44,7 +40,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var manager = new DynamicConnectionManager(port);
 
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.SECONDS.sleep(3);
 
         var buffer = manager.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
 
@@ -59,7 +55,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             workloads[i].start();
         }
 
-        TimeUnit.SECONDS.sleep(8);
+        TimeUnit.SECONDS.sleep(5);
 
         for(int i = 0; i< remoteLids.length; i++) {
             workloads[i].stop();
