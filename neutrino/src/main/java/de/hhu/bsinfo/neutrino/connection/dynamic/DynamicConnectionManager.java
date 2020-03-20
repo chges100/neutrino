@@ -228,17 +228,16 @@ public class DynamicConnectionManager {
             // get next index
             var tmp = lru.poll(LRU_POLL_TIME, TimeUnit.MILLISECONDS);
 
-            if(tmp == null) {
+            if (tmp == null) {
                 return 0;
             }
 
             idx = tmp;
 
 
-
             stamp = rwLocks[idx].writeLock();
 
-            if(System.currentTimeMillis() - connectionDuration[idx] < MIN_CONNECTION_DURATION) {
+            if (System.currentTimeMillis() - connectionDuration[idx] < MIN_CONNECTION_DURATION) {
                 rwLocks[idx].unlockWrite(stamp);
                 return 0;
             }
@@ -247,16 +246,16 @@ public class DynamicConnectionManager {
 
 
             // insert new connection index
-            if(!lidToIndex.compareAndSet(remoteLocalId, INVALID_INDEX, idx)) {
+            if (!lidToIndex.compareAndSet(remoteLocalId, INVALID_INDEX, idx)) {
                 throw new IOException("There is already another connection to remote " + remoteLocalId + "\n");
             }
 
             // disconnect from old remote
             var oldRemoteLid = (short) connectionAllocation.getAndSet(idx, remoteLocalId);
-            if(oldRemoteLid != INVALID_LID) {
+            if (oldRemoteLid != INVALID_LID) {
                 lidToIndex.compareAndSet(oldRemoteLid, idx, INVALID_INDEX);
                 dynamicConnectionHandler.sendDisconnect(localId, oldRemoteLid);
-                if(connections[idx].isConnected()) {
+                if (connections[idx].isConnected()) {
                     connections[idx].disconnect();
                 }
             }
@@ -266,6 +265,8 @@ public class DynamicConnectionManager {
         } catch (InterruptedException e) {
             LOGGER.debug("Could not receive connection index to create connection to remote {}", remoteLocalId);
             return 0;
+        } catch (IllegalMonitorStateException e) {
+            LOGGER.trace("{}", e);
         } catch (IOException e) {
             LOGGER.debug("Could not create connection to {}\n{}", remoteLocalId, e);
             rwLocks[idx].unlockWrite(stamp);
@@ -482,11 +483,12 @@ public class DynamicConnectionManager {
     private final class DynamicConnectionHandler extends UnreliableDatagram {
 
         private AtomicInteger receiveQueueFillCount;
-        private final int maxSendWorkRequests = 250;
-        private final int maxReceiveWorkRequests = 250;
+        private final int maxSendWorkRequests = 500;
+        private final int maxReceiveWorkRequests = 500;
 
         private final SendWorkRequest sendWorkRequests[];
         private final ReceiveWorkRequest receiveWorkRequests[];
+
 
         private final SGEProvider sendSGEProvider;
         private final SGEProvider receiveSGEProvider;
@@ -540,6 +542,7 @@ public class DynamicConnectionManager {
             var msg = new LocalMessage(LocalBuffer.wrap(sge.getAddress(), sge.getLength()));
             msg.setMessageType(msgType);
             msg.setPayload(payload);
+
 
             var workRequest = buildSendWorkRequest(sge, remoteInfo, sendWrIdProvider.getAndIncrement() % maxSendWorkRequests);
             sendWorkRequests[(int) workRequest.getId()] = workRequest;
