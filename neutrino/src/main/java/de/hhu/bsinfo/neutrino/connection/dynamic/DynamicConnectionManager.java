@@ -294,14 +294,17 @@ public class DynamicConnectionManager {
         executor.shutdown();
         dynamicConnectionHandler.close();
 
-        try {
-            for(var connection : connections) {
-                if(connection.isConnected()) {
-                    connection.disconnect();
-                }
+
+        for(var connection : connections) {
+            if(connection.isConnected()) {
+                var t = new Thread(() -> {
+                    try {
+                        connection.disconnect();
+                    } catch (IOException e) {
+                        LOGGER.debug("Error disconnecting connection {}: {}", connection.getId(), e);
+                    }
+                });
             }
-        } catch (Exception e) {
-            LOGGER.error("Could not disconnect all connections: {}", e);
         }
 
         printLocalBufferInfos();
@@ -566,12 +569,20 @@ public class DynamicConnectionManager {
         @Override
         public void close() {
             cqpt.shutdown();
+
+            boolean killed = false;
+
+            while(!killed) {
+                killed = cqpt.isKilled();
+            }
+
             queuePair.close();
         }
 
         private class CompletionQueuePollThread extends Thread {
 
             private boolean isRunning = true;
+            private boolean killed = false;
             private final int batchSize = 10;
 
             @Override
@@ -625,10 +636,16 @@ public class DynamicConnectionManager {
                     }
                 }
 
+                killed = true;
+
             }
 
             public void shutdown() {
                 isRunning = false;
+            }
+
+            public boolean isKilled() {
+                return killed;
             }
         }
     }
