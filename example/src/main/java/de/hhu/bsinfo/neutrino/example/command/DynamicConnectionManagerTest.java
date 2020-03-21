@@ -8,7 +8,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
+import java.sql.Time;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 
@@ -40,6 +43,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var manager = new DynamicConnectionManager(port);
 
+        var executor  = (ThreadPoolExecutor) Executors.newCachedThreadPool();
+
         TimeUnit.SECONDS.sleep(3);
 
         var buffer = manager.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
@@ -50,15 +55,18 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var remoteLids = manager.getRemoteLocalIds();
         var workloads = new WorkloadExecutor[remoteLids.length];
 
-        for(int i = 0; i< remoteLids.length; i++) {
-            workloads[i] = new WorkloadExecutor(manager, buffer, 0, remoteLids[i]);
-            workloads[i].start();
+        for (short remoteLid : remoteLids) {
+            executor.submit(new WorkloadExecutor(manager, buffer, 0, remoteLid));
         }
 
         TimeUnit.SECONDS.sleep(5);
 
-        for(int i = 0; i< remoteLids.length; i++) {
-            workloads[i].stop();
+
+        try {
+            executor.shutdownNow();
+            executor.awaitTermination(500, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            LOGGER.info("Not all workload threads terminated");
         }
 
         manager.shutdown();
@@ -69,7 +77,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     }
 
-    private class WorkloadExecutor extends Thread {
+    private class WorkloadExecutor implements Runnable {
         private DynamicConnectionManager manager;
         private RegisteredBuffer data;
         private long offset;

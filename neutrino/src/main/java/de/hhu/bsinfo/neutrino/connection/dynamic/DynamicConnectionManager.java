@@ -265,8 +265,6 @@ public class DynamicConnectionManager {
         } catch (InterruptedException e) {
             LOGGER.debug("Could not receive connection index to create connection to remote {}", remoteLocalId);
             return 0;
-        } catch (IllegalMonitorStateException e) {
-            LOGGER.trace("{}", e);
         } catch (IOException e) {
             LOGGER.debug("Could not create connection to {}\n{}", remoteLocalId, e);
             rwLocks[idx].unlockWrite(stamp);
@@ -292,6 +290,13 @@ public class DynamicConnectionManager {
         udReceiver.shutdown();
 
         executor.shutdown();
+
+        try {
+            executor.awaitTermination(500, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            LOGGER.info("Thread Pool termination not yet finished - continue shutdown");
+        }
+
         dynamicConnectionHandler.close();
 
 
@@ -689,10 +694,8 @@ public class DynamicConnectionManager {
 
             var stamp = readLockConnection(remoteLocalId);
             var idx = lidToIndex.get(remoteLocalId);
-            //LOGGER.debug("CON_REQ WITH IDX {} and STMP {} FROM {}", idx, stamp, remoteLocalId);
 
             try {
-                //LOGGER.debug("CON_REQ START CONNECT IDX {} TO {}", idx, remoteLocalId);
                 connections[idx].connect(remoteInfo);
                 connectionDuration[idx] = System.currentTimeMillis();
                 //lru.offer(idx);
