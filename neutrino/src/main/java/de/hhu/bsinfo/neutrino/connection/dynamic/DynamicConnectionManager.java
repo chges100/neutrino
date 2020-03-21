@@ -170,7 +170,7 @@ public class DynamicConnectionManager {
 
             if(!connected) {
                 rwLocks[idx].unlockRead(stamp);
-                LockSupport.parkNanos(EXECUTE_POLL_TIME * 100);
+                LockSupport.parkNanos(EXECUTE_POLL_TIME);
             }
         }
 
@@ -226,7 +226,7 @@ public class DynamicConnectionManager {
 
         try {
             // get next index
-            var tmp = lru.poll(LRU_POLL_TIME, TimeUnit.MILLISECONDS);
+            var tmp = lru.peek();//(LRU_POLL_TIME, TimeUnit.MILLISECONDS);
 
             if (tmp == null) {
                 return 0;
@@ -262,10 +262,10 @@ public class DynamicConnectionManager {
 
             dynamicConnectionHandler.sendConnectionRequest(new RCInformation(connections[idx]), remoteLocalId);
 
-        } catch (InterruptedException e) {
+        } /*catch (InterruptedException e) {
             LOGGER.debug("Could not receive connection index to create connection to remote {}", remoteLocalId);
             return 0;
-        } catch (IOException e) {
+        } */catch (IOException e) {
             LOGGER.debug("Could not create connection to {}\n{}", remoteLocalId, e);
             rwLocks[idx].unlockWrite(stamp);
             lru.offer(idx);
