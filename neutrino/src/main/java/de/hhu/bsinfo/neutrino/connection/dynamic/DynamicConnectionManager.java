@@ -9,7 +9,6 @@ import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.LocalMessage;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
-import de.hhu.bsinfo.neutrino.connection.util.Pair;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.connection.util.SGEProvider;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
@@ -36,6 +35,7 @@ public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
     private static final long BUFFER_SIZE = 1024*1024;
+    private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 200;
     private static final long EXECUTE_POLL_TIME = 10000;
     private static final long LRU_POLL_TIME = 500;
     private static final int LOCAL_BUFFER_READ = 19;
@@ -67,6 +67,8 @@ public class DynamicConnectionManager {
 
     private final UDInformationPropagator udPropagator;
     private final UDInformationReceiver udReceiver;
+
+    private final RCCompletionQueuePollThread rcCqpt;
 
     private final int UDPPort;
 
@@ -134,6 +136,9 @@ public class DynamicConnectionManager {
 
         udReceiver.start();
         udPropagator.start();
+
+        rcCqpt = new RCCompletionQueuePollThread(RC_COMPLETION_QUEUE_POLL_BATCH_SIZE);
+        rcCqpt.start();
     }
 
     public void remoteWriteToAll(RegisteredBuffer data, long offset, long length) {
@@ -177,17 +182,6 @@ public class DynamicConnectionManager {
         // perform operation
         LOGGER.debug("Execute remote RDMA operation on {}, should be on {}", connections[idx].getRemoteLocalId(), remoteLocalId);
         connections[idx].execute(data, opCode, offset, length, remoteBuffers[remoteLocalId].getAddress(), remoteBuffers[remoteLocalId].getRemoteKey(), 0);
-
-        int poll = 0;
-
-        while(poll == 0) {
-            try {
-                poll = connections[idx].pollSend(1);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-        }
 
         LOGGER.debug("REMOTE EXECUTION COMPLETE");
 
@@ -290,6 +284,8 @@ public class DynamicConnectionManager {
         udReceiver.shutdown();
 
         executor.shutdown();
+
+        rcCqpt.shutdown();
 
         try {
             executor.awaitTermination(500, TimeUnit.MILLISECONDS);
@@ -501,7 +497,7 @@ public class DynamicConnectionManager {
         private final SGEProvider sendSGEProvider;
         private final SGEProvider receiveSGEProvider;
 
-        private final CompletionQueuePollThread cqpt;
+        private final UDCompletionQueuePollThread udCqpt;
 
         public DynamicConnectionHandler(DeviceContext deviceContext) throws IOException  {
 
@@ -517,8 +513,8 @@ public class DynamicConnectionManager {
             sendSGEProvider = new SGEProvider(getDeviceContext(), maxSendWorkRequests, Message.getSize());
             receiveSGEProvider = new SGEProvider(getDeviceContext(), maxReceiveWorkRequests, Message.getSize() + UD_Receive_Offset);
 
-            cqpt = new CompletionQueuePollThread();
-            cqpt.start();
+            udCqpt = new UDCompletionQueuePollThread();
+            udCqpt.start();
         }
 
         public void answerConnectionRequest(RCInformation localQP, UDInformation remoteInfo) {
@@ -573,18 +569,18 @@ public class DynamicConnectionManager {
 
         @Override
         public void close() {
-            cqpt.shutdown();
+            udCqpt.shutdown();
 
             boolean killed = false;
 
             while(!killed) {
-                killed = cqpt.isKilled();
+                killed = udCqpt.isKilled();
             }
 
             queuePair.close();
         }
 
-        private class CompletionQueuePollThread extends Thread {
+        private class UDCompletionQueuePollThread extends Thread {
 
             private boolean isRunning = true;
             private boolean killed = false;
@@ -746,6 +742,38 @@ public class DynamicConnectionManager {
             } finally {
                 rwLocks[idx].unlockWrite(stamp);
             }
+        }
+    }
+
+    private class RCCompletionQueuePollThread extends Thread {
+        private boolean isRunning = true;
+        private final int batchSize;
+
+        public RCCompletionQueuePollThread(int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        @Override
+        public void run() {
+            while(isRunning) {
+                for(int i = 0; i < MAX_CONNECTONS; i++) {
+                    var stamp = rwLocks[i].tryReadLock();
+
+                    if(stamp != 0) {
+                        try {
+                            connections[i].pollSend(batchSize);
+                        } catch (IOException e) {
+                            LOGGER.error(e.toString());
+                        }
+
+                        rwLocks[i].unlockRead(stamp);
+                    }
+                }
+            }
+        }
+
+        public void shutdown() {
+            isRunning = false;
         }
     }
 }
