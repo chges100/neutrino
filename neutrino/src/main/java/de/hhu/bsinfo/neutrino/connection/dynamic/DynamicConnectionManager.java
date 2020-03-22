@@ -56,7 +56,7 @@ public class DynamicConnectionManager {
     private final AtomicIntegerArray lidToIndex;
 
     private final ReliableConnection connections[];
-    private long connectionDuration[];
+    private long connectionStart[];
     private final StampedLock rwLocks[];
     private final AtomicIntegerArray connectionAllocation;
 
@@ -105,7 +105,7 @@ public class DynamicConnectionManager {
         }
 
         connections = new ReliableConnection[MAX_CONNECTONS];
-        connectionDuration = new long[MAX_CONNECTONS];
+        connectionStart = new long[MAX_CONNECTONS];
         rwLocks = new StampedLock[MAX_CONNECTONS];
         connectionAllocation = new AtomicIntegerArray(MAX_CONNECTONS);
         lru = new ArrayBlockingQueue<>(MAX_CONNECTONS);
@@ -116,7 +116,7 @@ public class DynamicConnectionManager {
 
             rwLocks[i] = new StampedLock();
             connectionAllocation.set(i, INVALID_LID);
-            connectionDuration[i] = System.currentTimeMillis();
+            connectionStart[i] = System.currentTimeMillis();
 
             lru.offer(i);
         }
@@ -231,12 +231,12 @@ public class DynamicConnectionManager {
 
             stamp = rwLocks[idx].writeLock();
 
-            if (System.currentTimeMillis() - connectionDuration[idx] < MIN_CONNECTION_DURATION) {
+            if (System.currentTimeMillis() - connectionStart[idx] < MIN_CONNECTION_DURATION) {
                 rwLocks[idx].unlockWrite(stamp);
                 return 0;
             }
 
-            connectionDuration[idx] = System.currentTimeMillis();
+            connectionStart[idx] = System.currentTimeMillis();
 
 
             // insert new connection index
@@ -256,10 +256,7 @@ public class DynamicConnectionManager {
 
             dynamicConnectionHandler.sendConnectionRequest(new RCInformation(connections[idx]), remoteLocalId);
 
-        } /*catch (InterruptedException e) {
-            LOGGER.debug("Could not receive connection index to create connection to remote {}", remoteLocalId);
-            return 0;
-        } */catch (IOException e) {
+        } catch (IOException e) {
             LOGGER.debug("Could not create connection to {}\n{}", remoteLocalId, e);
             rwLocks[idx].unlockWrite(stamp);
             lru.offer(idx);
@@ -283,7 +280,7 @@ public class DynamicConnectionManager {
         udPropagator.shutdown();
         udReceiver.shutdown();
 
-        executor.shutdown();
+        executor.shutdownNow();
 
         rcCqpt.shutdown();
 
@@ -687,18 +684,22 @@ public class DynamicConnectionManager {
 
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
+            boolean connected = false;
 
-            var stamp = readLockConnection(remoteLocalId);
-            var idx = lidToIndex.get(remoteLocalId);
+            while(!connected) {
 
-            try {
-                connections[idx].connect(remoteInfo);
-                connectionDuration[idx] = System.currentTimeMillis();
-                //lru.offer(idx);
-            } catch (IOException e) {
-                LOGGER.debug("Could not connect to remote {}\n{}", remoteLocalId, e);
+                var stamp = readLockConnection(remoteLocalId);
+                var idx = lidToIndex.get(remoteLocalId);
+
+                try {
+                    connected = connections[idx].connect(remoteInfo);
+                    connectionStart[idx] = System.currentTimeMillis();
+                } catch (IOException e) {
+                    LOGGER.debug("Could not connect to remote {}\n{}", remoteLocalId, e);
+                }
+
+                rwLocks[idx].unlockRead(stamp);
             }
-            rwLocks[idx].unlockRead(stamp);
         }
 
         private void handleBufferInfo() {
@@ -722,7 +723,7 @@ public class DynamicConnectionManager {
             long stamp = 0;
             try {
                 // make sure that this connection was alive long enough
-                long duration = System.currentTimeMillis() - connectionDuration[idx];
+                long duration = System.currentTimeMillis() - connectionStart[idx];
                 if(duration < MIN_CONNECTION_DURATION) {
                     Thread.sleep(MIN_CONNECTION_DURATION - duration);
                 }

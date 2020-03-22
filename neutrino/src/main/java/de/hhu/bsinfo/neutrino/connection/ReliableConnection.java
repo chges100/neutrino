@@ -15,11 +15,13 @@ import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class ReliableConnection extends QPSocket implements Connectable<RCInformation>, Executor {
+public class ReliableConnection extends QPSocket implements Connectable<Boolean, RCInformation>, Executor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
     private static final short INVALID_LID = Short.MAX_VALUE;
     private static final int BATCH_SIZE = 10;
+    private static final long HANDSHAKE_CONNECT_TIMEOUT = 2000;
+    private static final long HANDSHAKE_DISCONNECT_TIMEOUT = 200;
 
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private final int id;
@@ -50,10 +52,10 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     }
 
     @Override
-    public void connect(RCInformation remoteInfo) throws IOException {
+    public Boolean connect(RCInformation remoteInfo) throws IOException {
 
         if(changeConnection.getAndSet(true)){
-            throw new IOException("Connection is already changing or set up to remote " + remoteLid);
+            return true;
         }
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToReceiveAttributesRC(
@@ -69,10 +71,15 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         LOGGER.info("Moved queue pair into RTS state");
 
-        //initialHandshake();
+        /*if(!handshake(MessageType.RC_CONNECT, HANDSHAKE_CONNECT_TIMEOUT)) {
+            changeConnection.set(false);
+            throw  new IOException("Could not finish initial handshake");
+        }*/
 
         remoteLid.set(remoteInfo.getLocalId());
         isConnected.getAndSet(true);
+
+        return true;
     }
 
     public long send(RegisteredBuffer data) {
@@ -184,28 +191,69 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         return completionArray.getLength();
     }
 
-    private void initialHandshake() throws IOException{
-        LOGGER.debug("Initial handshake of connection {} started", getId());
-        var message = new Message(getDeviceContext(), MessageType.RC_HANDSHAKE, "");
+    private boolean handshake(MessageType msgType, long timeOut) throws IOException{
+        LOGGER.debug("Handshake of connection {} with message {} started", getId(), msgType);
+
+        var message = new Message(getDeviceContext(), msgType, "");
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
+        receiveBuffer.clear();
 
-        receive(receiveBuffer);
-        send(message.getByteBuffer());
+        var receiveWrId = receive(receiveBuffer);
+        var sendWrId = send(message.getByteBuffer());
 
-        int sentCount = 0;
-        do{
-            sentCount = pollSend(1);
-        } while (sentCount == 0);
+        boolean isTimeOut = false;
 
-        int receiveCount = 0;
-        do{
-            receiveCount = pollReceive(1);
-        } while (receiveCount == 0);
+
+        boolean isSent = false;
+        var startTime = System.currentTimeMillis();
+
+        while(!isSent && !isTimeOut) {
+
+            if(System.currentTimeMillis() - startTime > timeOut) {
+                isTimeOut = true;
+            }
+
+            var wcs = pollSendCompletions(BATCH_SIZE);
+            for(int i = 0; i < wcs.getLength(); i++) {
+                if(wcs.get(i).getId() == sendWrId) {
+                    isSent = true;
+                }
+            }
+        }
+
+        boolean isReceived = false;
+
+        while(!isReceived && !isTimeOut) {
+
+            if(System.currentTimeMillis() - startTime > timeOut) {
+                isTimeOut = true;
+            }
+
+            var wcs = pollReceiveCompletions(BATCH_SIZE);
+            for(int i = 0; i < wcs.getLength(); i++) {
+                if(wcs.get(i).getId() == receiveWrId) {
+                    var msg = new Message(receiveBuffer);
+                    if(msg.getMessageType() == msgType) {
+                        isReceived = true;
+                    }
+                }
+            }
+        }
+
+        LOGGER.debug("TIME-OUT: {}", System.currentTimeMillis() - startTime);
+
+        if(isTimeOut) {
+            if(!queuePair.modify(QueuePair.Attributes.Builder.buildResetAttributesRC())) {
+                throw new IOException("Unable to move queue pair into RESET state");
+            }
+        }
 
         message.close();
         receiveBuffer.close();
 
-        LOGGER.debug("Initial handshake of connection {} finished", getId());
+        LOGGER.debug("Handshake of connection {}  with message {} finished", getId(), msgType);
+
+        return !isTimeOut;
     }
 
     @Override
@@ -221,39 +269,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         // set remote LID
         remoteLid.getAndSet(INVALID_LID);
 
-        var message = new Message(getDeviceContext(), MessageType.RC_DISCONNECT, "");
-        var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
-        receiveBuffer.clear();
-
-        var receiveWrId = receive(receiveBuffer);
-        var sendWrId = send(message.getByteBuffer());
-
-
-        boolean isSent = false;
-        while(!isSent) {
-            var wcs = pollSendCompletions(BATCH_SIZE);
-            for(int i = 0; i < wcs.getLength(); i++) {
-                if(wcs.get(i).getId() == sendWrId) {
-                    isSent = true;
-                }
-            }
-        }
-
-        boolean isReceived = false;
-        while(!isReceived) {
-            var wcs = pollReceiveCompletions(BATCH_SIZE);
-            for(int i = 0; i < wcs.getLength(); i++) {
-                if(wcs.get(i).getId() == receiveWrId) {
-                    var msg = new Message(receiveBuffer);
-                    if(msg.getMessageType() == MessageType.RC_DISCONNECT)
-                        isReceived = true;
-                }
-            }
-        }
-
-        message.close();
-        receiveBuffer.close();
-
+        handshake(MessageType.RC_DISCONNECT, HANDSHAKE_DISCONNECT_TIMEOUT);
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildResetAttributesRC())) {
             throw new IOException("Unable to move queue pair into RESET state");

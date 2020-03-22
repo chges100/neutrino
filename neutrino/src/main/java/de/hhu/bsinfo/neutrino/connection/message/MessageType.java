@@ -6,6 +6,6 @@ public enum MessageType {
     CONNECTION_ACK,
     DISCONNECT,
     BUFFER_INFO,
-    RC_HANDSHAKE,
+    RC_CONNECT,
     RC_DISCONNECT
 }
