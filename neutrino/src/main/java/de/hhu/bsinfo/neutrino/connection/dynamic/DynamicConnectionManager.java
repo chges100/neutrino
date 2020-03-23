@@ -761,12 +761,13 @@ public class DynamicConnectionManager {
                     var stamp = rwLocks[i].tryReadLock();
 
                     if(stamp != 0) {
-                        try {
-                            connections[i].pollSend(batchSize);
-                        } catch (IOException e) {
-                            LOGGER.error(e.toString());
+                        if(connections[i].isConnected()) {
+                            try {
+                                connections[i].pollSend(batchSize);
+                            } catch (IOException e) {
+                                LOGGER.error(e.toString());
+                            }
                         }
-
                         rwLocks[i].unlockRead(stamp);
                     }
                 }

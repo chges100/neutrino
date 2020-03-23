@@ -71,10 +71,10 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         LOGGER.info("Moved queue pair into RTS state");
 
-        /*if(!handshake(MessageType.RC_CONNECT, HANDSHAKE_CONNECT_TIMEOUT)) {
+        if(!handshake(MessageType.RC_CONNECT, HANDSHAKE_CONNECT_TIMEOUT)) {
             changeConnection.set(false);
             throw  new IOException("Could not finish initial handshake");
-        }*/
+        }
 
         remoteLid.set(remoteInfo.getLocalId());
         isConnected.getAndSet(true);
@@ -239,8 +239,6 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
                 }
             }
         }
-
-        LOGGER.debug("TIME-OUT: {}", System.currentTimeMillis() - startTime);
 
         if(isTimeOut) {
             if(!queuePair.modify(QueuePair.Attributes.Builder.buildResetAttributesRC())) {
