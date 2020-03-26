@@ -9,6 +9,7 @@ import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.LocalMessage;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
+import de.hhu.bsinfo.neutrino.connection.util.AtomicReadWriteLockArray;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.connection.util.SGEProvider;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
@@ -38,13 +39,9 @@ public class DynamicConnectionManager {
 
     private static final long BUFFER_SIZE = 1024*1024;
     private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 200;
-    private static final long EXECUTE_POLL_TIME = 10000;
-    private static final long LRU_POLL_TIME = 500;
+
     private static final int LOCAL_BUFFER_READ = 19;
-    private static final long MIN_CONNECTION_DURATION = 50;
-    private static final int MAX_CONNECTONS = 1;
-    private static final int INVALID_INDEX = Integer.MAX_VALUE;
-    private static final short INVALID_LID = Short.MAX_VALUE;
+    private static final short MAX_LID = Short.MAX_VALUE;
 
     private final short localId;
 
@@ -57,6 +54,8 @@ public class DynamicConnectionManager {
     private final Int2ObjectHashMap<ReliableConnection> connections;
     private final Int2ObjectHashMap<BufferInformation> remoteBuffers;
     private final Int2ObjectHashMap<RegisteredBuffer> localBuffers;
+
+    private final AtomicReadWriteLockArray rwLocks;
 
     private final UDInformationPropagator udPropagator;
     private final UDInformationReceiver udReceiver;
@@ -76,6 +75,8 @@ public class DynamicConnectionManager {
         remoteBuffers = new Int2ObjectHashMap<>();
         localBuffers = new Int2ObjectHashMap<>();
         connections = new Int2ObjectHashMap<>();
+
+        rwLocks = new AtomicReadWriteLockArray(MAX_LID);
 
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
