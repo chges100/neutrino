@@ -85,7 +85,7 @@ public class AtomicReadWriteLockArray {
         }
     }
 
-    public void convertWritetoReadLock(int i) {
+    public void convertWriteToReadLock(int i) {
         var oldValue = array.getAndSet(i, 1);
 
         if(oldValue != -1) {

@@ -51,11 +51,17 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         }
     }
 
+    public void reset() throws IOException {
+        if(!queuePair.modify(QueuePair.Attributes.Builder.buildResetAttributesRC())) {
+            throw new IOException("Unable to move queue pair into RESET state");
+        }
+    }
+
     @Override
     public Boolean connect(RCInformation remoteInfo) throws IOException {
 
         if(changeConnection.getAndSet(true)){
-            return true;
+            return isConnected.get();
         }
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToReceiveAttributesRC(
@@ -72,8 +78,11 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         LOGGER.info("Moved queue pair into RTS state");
 
         if(!handshake(MessageType.RC_CONNECT, HANDSHAKE_CONNECT_TIMEOUT)) {
+            reset();
+            init();
+
             changeConnection.set(false);
-            throw  new IOException("Could not finish initial handshake");
+            throw  new IOException("Connection " + id + ": Could not finish initial handshake to remote " + remoteInfo.getLocalId());
         }
 
         remoteLid.set(remoteInfo.getLocalId());
@@ -240,16 +249,12 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
             }
         }
 
-        if(isTimeOut) {
-            if(!queuePair.modify(QueuePair.Attributes.Builder.buildResetAttributesRC())) {
-                throw new IOException("Unable to move queue pair into RESET state");
-            }
+        if(!isTimeOut) {
+            LOGGER.debug("Handshake of connection {}  with message {} finished", getId(), msgType);
         }
 
         message.close();
         receiveBuffer.close();
-
-        LOGGER.debug("Handshake of connection {}  with message {} finished", getId(), msgType);
 
         return !isTimeOut;
     }
@@ -269,10 +274,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         handshake(MessageType.RC_DISCONNECT, HANDSHAKE_DISCONNECT_TIMEOUT);
 
-        if(!queuePair.modify(QueuePair.Attributes.Builder.buildResetAttributesRC())) {
-            throw new IOException("Unable to move queue pair into RESET state");
-        }
-
+        reset();
         init();
 
         // now connection is ready to be connected
@@ -283,6 +285,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
     @Override
     public void close() throws IOException {
+        reset();
         LOGGER.info("Close reliable connection {}", id);
         queuePair.close();
     }

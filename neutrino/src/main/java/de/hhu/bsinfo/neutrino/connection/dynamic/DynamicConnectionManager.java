@@ -27,12 +27,9 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.locks.LockSupport;
-import java.util.concurrent.locks.StampedLock;
 
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
@@ -42,6 +39,9 @@ public class DynamicConnectionManager {
 
     private static final int LOCAL_BUFFER_READ = 19;
     private static final short MAX_LID = Short.MAX_VALUE;
+
+    private static final long CREATE_CONNECTION_TIMEOUT = 100;
+    private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
     private final short localId;
 
@@ -136,43 +136,48 @@ public class DynamicConnectionManager {
 
     private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, short remoteLocalId) {
         boolean connected = false;
+        ReliableConnection connection = null;
 
         while (!connected) {
             if(!connections.containsKey(remoteLocalId)) {
                 createConnection(remoteLocalId);
-            } else {
-                rwLocks.readLock(remoteLocalId);
             }
 
-            if(connections.get(remoteLocalId).isConnected()) {
+            rwLocks.readLock(remoteLocalId);
+            connection = connections.get(remoteLocalId);
+
+            if(connection != null && connection.isConnected()) {
                 connected = true;
             } else {
                 rwLocks.unlockRead(remoteLocalId);
+                LockSupport.parkNanos(REMOTE_EXEC_PARK_TIME);
             }
         }
 
-        connections.get(remoteLocalId).execute(data, opCode, offset, length, remoteBuffers.get(remoteLocalId).getAddress(), remoteBuffers.get(remoteLocalId).getRemoteKey(), 0);
+        connection.execute(data, opCode, offset, length, remoteBuffers.get(remoteLocalId).getAddress(), remoteBuffers.get(remoteLocalId).getRemoteKey(), 0);
 
         rwLocks.unlockRead(remoteLocalId);
 
     }
 
     private void createConnection(short remoteLocalId) {
-        rwLocks.writeLock(remoteLocalId);
 
-        try {
-            var connection = new ReliableConnection(deviceContexts.get(0));
-            connection.init();
+        var locked = rwLocks.writeLock(remoteLocalId, CREATE_CONNECTION_TIMEOUT);
 
-            var localQP = new RCInformation(connection);
-            dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
+        if(locked && !connections.containsKey(remoteLocalId)) {
+            try {
+                var connection = new ReliableConnection(deviceContexts.get(0));
+                connection.init();
+                connections.put(remoteLocalId, connection);
 
-            connections.put(remoteLocalId, connection);
-        } catch (IOException e) {
-            LOGGER.error("Could not create connection to {}", remoteLocalId);
+                var localQP = new RCInformation(connection);
+                dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
+            } catch (IOException e) {
+                LOGGER.error("Could not create connection to {}", remoteLocalId);
+            } finally {
+                rwLocks.unlockWrite(remoteLocalId);
+            }
         }
-
-        rwLocks.convertWritetoReadLock(remoteLocalId);
     }
 
     public RegisteredBuffer allocRegisteredBuffer(int deviceId, long size) {
@@ -203,6 +208,7 @@ public class DynamicConnectionManager {
                 var t = new Thread(() -> {
                     try {
                         connection.disconnect();
+                        connection.close();
                     } catch (IOException e) {
                         LOGGER.debug("Error disconnecting connection {}: {}", connection.getId(), e);
                     }
@@ -583,19 +589,24 @@ public class DynamicConnectionManager {
 
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
-            if(!connections.containsKey(remoteLocalId)) {
-                createConnection(remoteLocalId);
-            } else {
+            boolean connected = false;
+
+            while (!connected) {
+                if (!connections.containsKey(remoteLocalId)) {
+                    createConnection(remoteLocalId);
+                }
+
                 rwLocks.readLock(remoteLocalId);
-            }
+                var connection = connections.get(remoteLocalId);
 
-            try {
-                connections.get(remoteLocalId).connect(remoteInfo);
-            } catch (IOException e) {
-                LOGGER.debug("Could not connect to remote {}\n{}", remoteLocalId, e);
+                try {
+                    connected = connection.connect(remoteInfo);
+                } catch (Exception e) {
+                    LOGGER.debug("Could not connect to remote {}\n{}", remoteLocalId, e);
+                } finally {
+                    rwLocks.unlockRead(remoteLocalId);
+                }
             }
-
-            rwLocks.unlockRead(remoteLocalId);
 
         }
 
@@ -610,7 +621,7 @@ public class DynamicConnectionManager {
         }
 
         private void handleDisconnect() {
-
+            // todo
         }
     }
 
@@ -629,8 +640,13 @@ public class DynamicConnectionManager {
 
                     if(connection.isConnected()) {
                         try {
+                            var remoteLocalId = connection.getRemoteLocalId();
+
+                            rwLocks.readLock(remoteLocalId);
                             connection.pollSend(batchSize);
-                        } catch (IOException e) {
+                            rwLocks.unlockRead(remoteLocalId);
+
+                        } catch (Exception e) {
                             LOGGER.error(e.toString());
                         }
                     }
