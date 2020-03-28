@@ -174,9 +174,11 @@ public class DynamicConnectionManager {
                 dynamicConnectionHandler.sendConnectionRequest(localQP, remoteLocalId);
             } catch (IOException e) {
                 LOGGER.error("Could not create connection to {}", remoteLocalId);
-            } finally {
-                rwLocks.unlockWrite(remoteLocalId);
             }
+        }
+
+        if(locked) {
+            rwLocks.unlockWrite(remoteLocalId);
         }
     }
 
@@ -185,7 +187,7 @@ public class DynamicConnectionManager {
     }
 
     public void shutdown() {
-        LOGGER.info("Shutdown dynamic connection manager");
+        LOGGER.debug("Shutdown dynamic connection manager");
 
         udPropagator.shutdown();
         udReceiver.shutdown();
@@ -202,13 +204,17 @@ public class DynamicConnectionManager {
 
         dynamicConnectionHandler.close();
 
+        LOGGER.debug("Begin disconnecting all existing connections");
 
-        for(var connection : connections.values()) {
-            if(connection.isConnected()) {
+        for(var kv : connections.entrySet()) {
+            if(kv.getValue().isConnected()) {
+                var connection = kv.getValue();
+
                 var t = new Thread(() -> {
                     try {
                         connection.disconnect();
                         connection.close();
+                        connections.remove(kv.getKey());
                     } catch (IOException e) {
                         LOGGER.debug("Error disconnecting connection {}: {}", connection.getId(), e);
                     }
@@ -615,7 +621,7 @@ public class DynamicConnectionManager {
             var bufferInfo = new BufferInformation(Long.parseLong(split[1]), Long.parseLong(split[2]), Integer.parseInt(split[3]));
             var remoteLid = Short.parseShort(split[0]);
 
-            LOGGER.info("Received new remote buffer information from {}: {}", remoteLid, bufferInfo);
+            LOGGER.trace("Received new remote buffer information from {}: {}", remoteLid, bufferInfo);
 
             remoteBuffers.put(remoteLid, bufferInfo);
         }
@@ -636,19 +642,20 @@ public class DynamicConnectionManager {
         @Override
         public void run() {
             while(isRunning) {
-                for(var connection : connections.values()) {
+                for(var remoteLocalId : connections.keySet()) {
+                    var locked = rwLocks.tryReadLock(remoteLocalId);
 
-                    if(connection.isConnected()) {
-                        try {
-                            var remoteLocalId = connection.getRemoteLocalId();
+                    if(locked) {
+                        var connection = connections.get(remoteLocalId);
 
-                            rwLocks.readLock(remoteLocalId);
-                            connection.pollSend(batchSize);
-                            rwLocks.unlockRead(remoteLocalId);
-
-                        } catch (Exception e) {
-                            LOGGER.error(e.toString());
+                        if(connection.isConnected()) {
+                            try {
+                                connection.pollSend(batchSize);
+                            } catch (Exception e) {
+                                LOGGER.error(e.toString());
+                            }
                         }
+                        rwLocks.unlockRead(remoteLocalId);
                     }
                 }
             }

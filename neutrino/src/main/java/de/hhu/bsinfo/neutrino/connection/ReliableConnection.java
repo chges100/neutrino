@@ -201,22 +201,28 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     }
 
     private boolean handshake(MessageType msgType, long timeOut) throws IOException{
-        LOGGER.debug("Handshake of connection {} with message {} started", getId(), msgType);
+        LOGGER.info("Handshake of connection {} with message {} started", getId(), msgType);
 
         var message = new Message(getDeviceContext(), msgType, "");
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
         receiveBuffer.clear();
 
         var receiveWrId = receive(receiveBuffer);
-        var sendWrId = send(message.getByteBuffer());
+        long sendWrId = 0;
 
         boolean isTimeOut = false;
 
 
         boolean isSent = false;
+        boolean isPosted = false;
         var startTime = System.currentTimeMillis();
 
         while(!isSent && !isTimeOut) {
+
+            if(!isPosted) {
+                sendWrId = send(message.getByteBuffer());
+                isPosted = true;
+            }
 
             if(System.currentTimeMillis() - startTime > timeOut) {
                 isTimeOut = true;
@@ -225,7 +231,12 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
             var wcs = pollSendCompletions(BATCH_SIZE);
             for(int i = 0; i < wcs.getLength(); i++) {
                 if(wcs.get(i).getId() == sendWrId) {
-                    isSent = true;
+                    if(wcs.get(i).getStatus() == WorkCompletion.Status.SUCCESS) {
+                        isSent = true;
+                    } else {
+                        isPosted = false;
+                    }
+
                 }
             }
         }
@@ -250,7 +261,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         }
 
         if(!isTimeOut) {
-            LOGGER.debug("Handshake of connection {}  with message {} finished", getId(), msgType);
+            LOGGER.info("Handshake of connection {}  with message {} finished", getId(), msgType);
         }
 
         message.close();
