@@ -43,8 +43,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var manager = new DynamicConnectionManager(port);
 
-        var executor  = (ThreadPoolExecutor) Executors.newCachedThreadPool();
-
         TimeUnit.SECONDS.sleep(3);
 
         var buffer = manager.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
@@ -54,6 +52,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var remoteLids = manager.getRemoteLocalIds();
         var workloads = new WorkloadExecutor[remoteLids.length];
+        var executor  = (ThreadPoolExecutor) Executors.newFixedThreadPool(remoteLids.length);
 
         for (short remoteLid : remoteLids) {
             executor.submit(new WorkloadExecutor(manager, buffer, 0, remoteLid));

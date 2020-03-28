@@ -150,11 +150,12 @@ public class DynamicConnectionManager {
                 connected = true;
             } else {
                 rwLocks.unlockRead(remoteLocalId);
-                LockSupport.parkNanos(REMOTE_EXEC_PARK_TIME);
+                //LockSupport.parkNanos(REMOTE_EXEC_PARK_TIME);
             }
         }
-
+        LOGGER.debug("Start EXEC on remote {} on connection {}", remoteLocalId, connection.getId());
         connection.execute(data, opCode, offset, length, remoteBuffers.get(remoteLocalId).getAddress(), remoteBuffers.get(remoteLocalId).getRemoteKey(), 0);
+        LOGGER.debug("Finished EXEC on remote {} on  connection {}", remoteLocalId, connection.getId());
 
         rwLocks.unlockRead(remoteLocalId);
 
@@ -190,12 +191,15 @@ public class DynamicConnectionManager {
         LOGGER.debug("Shutdown dynamic connection manager");
 
         udPropagator.shutdown();
+        LOGGER.debug("UDPopagator is shut down");
         udReceiver.shutdown();
+        LOGGER.debug("UDReceiver is shut down");
 
         executor.shutdownNow();
+        LOGGER.debug("Executor is shut down");
 
         rcCqpt.shutdown();
-
+        LOGGER.debug("RCCQPT is shut down");
         try {
             executor.awaitTermination(500, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
@@ -203,6 +207,7 @@ public class DynamicConnectionManager {
         }
 
         dynamicConnectionHandler.close();
+        LOGGER.debug("DCH is shut down");
 
         LOGGER.debug("Begin disconnecting all existing connections");
 
@@ -222,6 +227,7 @@ public class DynamicConnectionManager {
             }
         }
 
+        printRemoteBufferInfos();
         printLocalBufferInfos();
     }
 
@@ -269,8 +275,9 @@ public class DynamicConnectionManager {
     public void printRemoteBufferInfos() {
         String out = "Print out remote buffer information:\n";
 
-        for(var remoteBuffer : remoteBuffers.values()) {
-            out += remoteBuffer;
+        for(var kv : remoteBuffers.entrySet()) {
+            out += "Remote " + kv.getKey() + ": ";
+            out += kv.getValue();
             out += "\n";
         }
 
@@ -641,23 +648,28 @@ public class DynamicConnectionManager {
 
         @Override
         public void run() {
-            while(isRunning) {
-                for(var remoteLocalId : connections.keySet()) {
-                    var locked = rwLocks.tryReadLock(remoteLocalId);
+            try {
+                while(isRunning) {
+                    for(var remoteLocalId : connections.keySet().toArray()) {
+                        var locked = rwLocks.tryReadLock((int) remoteLocalId);
 
-                    if(locked) {
-                        var connection = connections.get(remoteLocalId);
+                        if(locked) {
+                            var connection = connections.get((int) remoteLocalId);
 
-                        if(connection.isConnected()) {
-                            try {
-                                connection.pollSend(batchSize);
-                            } catch (Exception e) {
-                                LOGGER.error(e.toString());
+                            if(connection.isConnected()) {
+                                try {
+                                    connection.pollSend(batchSize);
+                                } catch (Exception e) {
+                                    LOGGER.error(e.toString());
+                                }
                             }
+                            rwLocks.unlockRead((int) remoteLocalId);
                         }
-                        rwLocks.unlockRead(remoteLocalId);
                     }
                 }
+            } catch (IllegalStateException e) {
+                LOGGER.error("Illegal state exception {}", e);
+                e.printStackTrace();
             }
         }
 
