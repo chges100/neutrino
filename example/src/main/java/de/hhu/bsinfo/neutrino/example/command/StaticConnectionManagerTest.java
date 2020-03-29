@@ -2,7 +2,7 @@ package de.hhu.bsinfo.neutrino.example.command;
 
 
 import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
-import de.hhu.bsinfo.neutrino.connection.StaticConnectionManager;
+import de.hhu.bsinfo.neutrino.connection.nondynamic.StaticConnectionManager;
 
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.LocalMessage;

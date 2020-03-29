@@ -1,9 +1,6 @@
 package de.hhu.bsinfo.neutrino.connection.message;
 
 import de.hhu.bsinfo.neutrino.buffer.LocalBuffer;
-import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
-import de.hhu.bsinfo.neutrino.connection.StaticConnectionManager;
-import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.data.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

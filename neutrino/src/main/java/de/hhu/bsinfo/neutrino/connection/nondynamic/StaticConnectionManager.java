@@ -1,5 +1,8 @@
-package de.hhu.bsinfo.neutrino.connection;
+package de.hhu.bsinfo.neutrino.connection.nondynamic;
 
+import de.hhu.bsinfo.neutrino.connection.DeviceContext;
+import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
+import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.util.SocketRCInformationExchanger;
 import de.hhu.bsinfo.neutrino.verbs.Context;
 import org.slf4j.Logger;
@@ -9,7 +12,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class StaticConnectionManager {
 
