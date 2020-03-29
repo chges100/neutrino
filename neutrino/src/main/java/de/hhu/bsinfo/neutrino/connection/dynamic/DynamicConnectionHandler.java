@@ -48,7 +48,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     private final UDCompletionQueuePollThread udCqpt;
 
-    public DynamicConnectionHandler(DynamicConnectionManager dcm, DeviceContext deviceContext) throws IOException {
+    protected DynamicConnectionHandler(DynamicConnectionManager dcm, DeviceContext deviceContext) throws IOException {
 
         super(deviceContext);
 
@@ -76,23 +76,23 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         udCqpt.start();
     }
 
-    public UDInformation getLocalUDInformation() {
+    protected UDInformation getLocalUDInformation() {
         return localUDInformation;
     }
 
-    public void registerRemoteConnectionHandler(int remoteLocalId, UDInformation remoteHandlerInfo) {
+    protected void registerRemoteConnectionHandler(int remoteLocalId, UDInformation remoteHandlerInfo) {
         remoteHandlerInfos.put(remoteLocalId, remoteHandlerInfo);
     }
 
-    public UDInformation getRemoteHandlerInfo(int remoteLocalId) {
+    protected UDInformation getRemoteHandlerInfo(int remoteLocalId) {
         return remoteHandlerInfos.get(remoteLocalId);
     }
 
-    public boolean hasRemoteHandlerInfo(int remoteLocalId) {
+    protected boolean hasRemoteHandlerInfo(int remoteLocalId) {
         return remoteHandlerInfos.containsKey(remoteLocalId);
     }
 
-    public short[] getRemoteLocalIds() {
+    protected short[] getRemoteLocalIds() {
         var n = remoteHandlerInfos.size();
         var remotes = remoteHandlerInfos.keySet().toArray();
         short[] lids = new short[n];
@@ -104,22 +104,22 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         return lids;
     }
 
-    public void sendConnectionRequest(RCInformation localQP, short remoteLocalId) {
+    protected void sendConnectionRequest(RCInformation localQP, short remoteLocalId) {
         sendMessage(MessageType.CONNECTION_REQUEST, localQP.getPortNumber() + ":" + localQP.getLocalId() + ":" + localQP.getQueuePairNumber(), remoteHandlerInfos.get(remoteLocalId));
         LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
     }
 
-    public void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
+    protected void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
         sendMessage(MessageType.BUFFER_INFO, localId + ":" + bufferInformation.getAddress() + ":" + bufferInformation.getCapacity() + ":" + bufferInformation.getRemoteKey(), remoteHandlerInfos.get(remoteLocalId));
         LOGGER.trace("Send buffer info to {}", remoteLocalId);
     }
 
-    public void sendDisconnect(short localId, short remoteLocalId) {
+    protected void sendDisconnect(short localId, short remoteLocalId) {
         sendMessage(MessageType.DISCONNECT, localId + "", remoteHandlerInfos.get(remoteLocalId));
         LOGGER.debug("Send disconnect to {}", remoteLocalId);
     }
 
-    public void sendMessage(MessageType msgType, String payload, UDInformation remoteInfo) {
+    protected void sendMessage(MessageType msgType, String payload, UDInformation remoteInfo) {
         var sge = sendSGEProvider.getSGE();
         if(sge == null) {
             LOGGER.error("Cannot post another send request");
@@ -137,7 +137,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         postSend(workRequest);
     }
 
-    public void receiveMessage() {
+    protected void receiveMessage() {
         var sge = receiveSGEProvider.getSGE();
         if(sge == null) {
             LOGGER.error("Cannot post another receive request");
@@ -150,7 +150,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         postReceive(workRequest);
     }
 
-    public void shutdown() {
+    protected void shutdown() {
         executor.shutdownNow();
 
         try {
@@ -314,7 +314,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             LOGGER.trace("Received new remote buffer information from {}: {}", remoteLid, bufferInfo);
 
-            dcm.remoteBuffers.put(remoteLid, bufferInfo);
+            dcm.remoteBufferHandler.registerBufferInfo(remoteLid, bufferInfo);
         }
 
         private void handleDisconnect() {

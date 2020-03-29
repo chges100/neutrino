@@ -29,7 +29,7 @@ public class UDInformationHandler {
 
     private final short localId;
 
-    public UDInformationHandler(DynamicConnectionManager dcm, int port) throws IOException {
+    protected UDInformationHandler(DynamicConnectionManager dcm, int port) throws IOException {
         this.dcm = dcm;
         this.port = port;
         this.localId = dcm.getLocalId();
@@ -42,12 +42,12 @@ public class UDInformationHandler {
         udPropagator = new UDInformationPropagator();
     }
 
-    public void start() {
+    protected void start() {
         udReceiver.start();
         udPropagator.start();
     }
 
-    public void shutdown() {
+    protected void shutdown() {
         isRunning = false;
     }
 
@@ -80,14 +80,8 @@ public class UDInformationHandler {
                     // put remote handler info into map
                     dcm.dch.registerRemoteConnectionHandler(remoteLocalId, remoteInfo);
                     // create buffer for RDMA test
-                    if (!dcm.localBuffers.containsKey(remoteLocalId)) {
-                        var buffer = dcm.allocRegisteredBuffer(0, DynamicConnectionManager.BUFFER_SIZE);
-                        var bufferInfo = new BufferInformation(buffer);
-
-                        dcm.localBuffers.put(remoteLocalId, buffer);
-                        buffer.clear();
-
-                        dcm.dch.sendBufferInfo(bufferInfo, localId, remoteLocalId);
+                    if (!dcm.localBufferHandler.hasBuffer(remoteLocalId)) {
+                        dcm.localBufferHandler.createAndRegisterBuffer(remoteLocalId);
                     }
 
                     LOGGER.info("UDP: Add new remote connection handler {}", remoteInfo);

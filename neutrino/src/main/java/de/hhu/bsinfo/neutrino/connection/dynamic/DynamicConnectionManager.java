@@ -35,8 +35,10 @@ public class DynamicConnectionManager {
     protected DynamicConnectionHandler dch;
 
     protected final Int2ObjectHashMap<ReliableConnection> connections;
-    protected final Int2ObjectHashMap<BufferInformation> remoteBuffers;
-    protected final Int2ObjectHashMap<RegisteredBuffer> localBuffers;
+
+
+    protected RemoteBufferHandler remoteBufferHandler;
+    protected LocalBufferHandler localBufferHandler;
 
     protected final AtomicReadWriteLockArray rwLocks;
 
@@ -52,8 +54,6 @@ public class DynamicConnectionManager {
 
         deviceContexts = new ArrayList<>();
 
-        remoteBuffers = new Int2ObjectHashMap<>();
-        localBuffers = new Int2ObjectHashMap<>();
         connections = new Int2ObjectHashMap<>();
 
         rwLocks = new AtomicReadWriteLockArray(MAX_LID);
@@ -79,6 +79,9 @@ public class DynamicConnectionManager {
     }
 
     public void init() throws IOException{
+        remoteBufferHandler = new RemoteBufferHandler(this);
+        localBufferHandler= new LocalBufferHandler(this);
+
         LOGGER.trace("Create UD to handle connection requests");
         dch = new DynamicConnectionHandler(this, deviceContexts.get(0));
         LOGGER.info("Data of UD: {}", dch);
@@ -126,8 +129,11 @@ public class DynamicConnectionManager {
                 //LockSupport.parkNanos(REMOTE_EXEC_PARK_TIME);
             }
         }
+
+        var remoteBufferInfo = remoteBufferHandler.getBufferInfo(remoteLocalId);
+
         LOGGER.debug("Start EXEC on remote {} on connection {}", remoteLocalId, connection.getId());
-        connection.execute(data, opCode, offset, length, remoteBuffers.get(remoteLocalId).getAddress(), remoteBuffers.get(remoteLocalId).getRemoteKey(), 0);
+        connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
         LOGGER.debug("Finished EXEC on remote {} on  connection {}", remoteLocalId, connection.getId());
 
         rwLocks.unlockRead(remoteLocalId);
@@ -218,12 +224,19 @@ public class DynamicConnectionManager {
     }
 
     public void printRemoteBufferInfos() {
+        var remoteLocalIds = getRemoteLocalIds();
+
         String out = "Print out remote buffer information:\n";
 
-        for(var kv : remoteBuffers.entrySet()) {
-            out += "Remote " + kv.getKey() + ": ";
-            out += kv.getValue();
-            out += "\n";
+        for(var remoteLocalId : remoteLocalIds) {
+            var remoteBufferInfo = remoteBufferHandler.getBufferInfo(remoteLocalId);
+
+            if(remoteBufferInfo != null) {
+                out += "Remote " + remoteLocalId + ": ";
+                out += remoteBufferInfo;
+                out += "\n";
+            }
+
         }
 
         LOGGER.info(out);
@@ -231,14 +244,19 @@ public class DynamicConnectionManager {
     }
 
     public void printLocalBufferInfos() {
+        var remoteLocalIds = getRemoteLocalIds();
+
         String out = "Content of local connection RDMA buffers:\n";
 
-        for(var localBuffer : localBuffers.values()) {
+        for(var remoteLocalId : remoteLocalIds) {
 
-            out += "Buffer for remote with address " + localBuffer.getHandle() + ": ";
-            var tmp = new NativeString(localBuffer, 0, LOCAL_BUFFER_READ);
-            out += tmp.get() + "\n";
+            var buffer = localBufferHandler.getBuffer(remoteLocalId);
 
+            if(buffer != null) {
+                out += "Buffer for remote with address " + buffer.getHandle() + ": ";
+                var tmp = new NativeString(buffer, 0, LOCAL_BUFFER_READ);
+                out += tmp.get() + "\n";
+            }
         }
 
         LOGGER.info(out);
