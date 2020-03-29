@@ -2,13 +2,11 @@ package de.hhu.bsinfo.neutrino.example.command;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
-import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManagerOld;
 import de.hhu.bsinfo.neutrino.data.NativeString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
-import java.sql.Time;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -42,8 +40,9 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     public Void call() throws Exception {
 
         var manager = new DynamicConnectionManager(port);
+        manager.init();
 
-        TimeUnit.SECONDS.sleep(3);
+        TimeUnit.SECONDS.sleep(5);
 
         var buffer = manager.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
 

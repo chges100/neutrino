@@ -155,6 +155,7 @@ public class UnreliableDatagram extends QPSocket{
                 .add("localId=" + portAttributes.getLocalId())
                 .add("portNumber=" + 1)
                 .add("queuePairNumber=" + queuePair.getQueuePairNumber())
+                .add("queuePairKey=" + queuePair.queryAttributes().getQkey())
                 .toString();
     }
 }
