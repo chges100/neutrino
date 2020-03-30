@@ -24,12 +24,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.LockSupport;
 
 public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionHandler.class);
 
     private static final int MAX_SEND_WORK_REQUESTS = 500;
     private static final int MAX_RECEIVE_WORK_REQUESTS = 500;
+
+    private static final long BUFFER_ACK_TIMEOUT = 200;
 
     private final DynamicConnectionManager dcm;
     private final Int2ObjectHashMap<UDInformation> remoteHandlerInfos;
@@ -116,7 +120,12 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     protected void sendDisconnect(short localId, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.DISCONNECT, localId + "", remoteLocalId));
-        LOGGER.debug("Send disconnect to {}", remoteLocalId);
+        LOGGER.trace("Send disconnect to {}", remoteLocalId);
+    }
+
+    protected void sendBufferAck(short localId, short remoteLocalId) {
+        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_ACK, localId + "", remoteLocalId));
+        LOGGER.trace("Send Buffer ack to {}", remoteLocalId);
     }
 
     protected void sendMessage(MessageType msgType, String payload, UDInformation remoteInfo) {
@@ -271,6 +280,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 case DISCONNECT:
                     handleDisconnect();
                     break;
+                case BUFFER_ACK:
+                    handleBufferAck();
+                    break;
                 default:
                     LOGGER.info("Got message {}", payload);
                     break;
@@ -315,6 +327,15 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             LOGGER.trace("Received new remote buffer information from {}: {}", remoteLid, bufferInfo);
 
             dcm.remoteBufferHandler.registerBufferInfo(remoteLid, bufferInfo);
+
+            sendBufferAck(dcm.getLocalId(), remoteLid);
+        }
+
+        private void handleBufferAck() {
+            var split = payload.split(":");
+            var remoteLid = Short.parseShort(split[0]);
+
+            dcm.localBufferHandler.setBufferInfoAck(remoteLid);
         }
 
         private void handleDisconnect() {
@@ -345,21 +366,45 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 case DISCONNECT:
                     handleDisconnect();
                     break;
+                case BUFFER_ACK:
+                    handleBufferAck();
+                    break;
                 default:
                     LOGGER.info("Got message {}", payload);
                     break;
             }
         }
 
-        public void handleBufferInfo() {
+        private void handleBufferInfo() {
+
+            dcm.localBufferHandler.setBufferInfoSent(remoteLocalId);
+
+            boolean bufferAck = false;
+
+            while (!bufferAck) {
+                sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
+
+                var start = System.currentTimeMillis();
+
+                while (System.currentTimeMillis() - start < BUFFER_ACK_TIMEOUT) {
+                    if(dcm.localBufferHandler.getBufferInfoStatus(remoteLocalId) == LocalBufferHandler.ACKNOWLEDGED) {
+                        bufferAck = true;
+                        break;
+                    }
+                }
+            }
+
+        }
+
+        private void handleConnectionRequest() {
             sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
         }
 
-        public void handleConnectionRequest() {
+        private void handleDisconnect() {
             sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
         }
 
-        public void handleDisconnect() {
+        private void handleBufferAck() {
             sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
         }
     }
