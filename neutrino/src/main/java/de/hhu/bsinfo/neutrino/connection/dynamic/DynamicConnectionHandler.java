@@ -105,17 +105,17 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void sendConnectionRequest(RCInformation localQP, short remoteLocalId) {
-        sendMessage(MessageType.CONNECTION_REQUEST, localQP.getPortNumber() + ":" + localQP.getLocalId() + ":" + localQP.getQueuePairNumber(), remoteHandlerInfos.get(remoteLocalId));
+        executor.submit(new OutgoingMessageHandler(MessageType.CONNECTION_REQUEST, localQP.getPortNumber() + ":" + localQP.getLocalId() + ":" + localQP.getQueuePairNumber(), remoteLocalId));
         LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
     }
 
     protected void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
-        sendMessage(MessageType.BUFFER_INFO, localId + ":" + bufferInformation.getAddress() + ":" + bufferInformation.getCapacity() + ":" + bufferInformation.getRemoteKey(), remoteHandlerInfos.get(remoteLocalId));
+        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_INFO, localId + ":" + bufferInformation.getAddress() + ":" + bufferInformation.getCapacity() + ":" + bufferInformation.getRemoteKey(), remoteLocalId));
         LOGGER.trace("Send buffer info to {}", remoteLocalId);
     }
 
     protected void sendDisconnect(short localId, short remoteLocalId) {
-        sendMessage(MessageType.DISCONNECT, localId + "", remoteHandlerInfos.get(remoteLocalId));
+        executor.submit(new OutgoingMessageHandler(MessageType.DISCONNECT, localId + "", remoteLocalId));
         LOGGER.debug("Send disconnect to {}", remoteLocalId);
     }
 
@@ -319,6 +319,48 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         private void handleDisconnect() {
             // todo
+        }
+    }
+
+    private class OutgoingMessageHandler implements Runnable {
+        private final MessageType msgType;
+        private final String payload;
+        private final short remoteLocalId;
+
+        OutgoingMessageHandler(MessageType msgType, String payload, short remoteLocalId) {
+            this.msgType = msgType;
+            this.payload = payload;
+            this.remoteLocalId = remoteLocalId;
+        }
+
+        @Override
+        public void run() {
+            switch(msgType) {
+                case BUFFER_INFO:
+                    handleBufferInfo();
+                    break;
+                case CONNECTION_REQUEST:
+                    handleConnectionRequest();
+                    break;
+                case DISCONNECT:
+                    handleDisconnect();
+                    break;
+                default:
+                    LOGGER.info("Got message {}", payload);
+                    break;
+            }
+        }
+
+        public void handleBufferInfo() {
+            sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
+        }
+
+        public void handleConnectionRequest() {
+            sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
+        }
+
+        public void handleDisconnect() {
+            sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
         }
     }
 }
