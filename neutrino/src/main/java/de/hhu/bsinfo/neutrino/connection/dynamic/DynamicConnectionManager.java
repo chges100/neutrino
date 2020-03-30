@@ -23,7 +23,7 @@ public class DynamicConnectionManager {
     protected static final long BUFFER_SIZE = 1024*1024;
     private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 200;
 
-    private static final int LOCAL_BUFFER_READ = 19;
+    private static final int LOCAL_BUFFER_READ = 16;
     private static final short MAX_LID = Short.MAX_VALUE;
 
     private static final long CREATE_CONNECTION_TIMEOUT = 100;
@@ -133,9 +133,9 @@ public class DynamicConnectionManager {
 
         var remoteBufferInfo = remoteBufferHandler.getBufferInfo(remoteLocalId);
 
-        LOGGER.debug("Start EXEC on remote {} on connection {}", remoteLocalId, connection.getId());
+        LOGGER.trace("Start EXEC on remote {} on connection {}", remoteLocalId, connection.getId());
         connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
-        LOGGER.debug("Finished EXEC on remote {} on  connection {}", remoteLocalId, connection.getId());
+        LOGGER.trace("Finished EXEC on remote {} on  connection {}", remoteLocalId, connection.getId());
 
         rwLocks.unlockRead(remoteLocalId);
 

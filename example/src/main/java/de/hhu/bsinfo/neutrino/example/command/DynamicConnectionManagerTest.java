@@ -25,6 +25,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final int DEFAULT_SERVER_PORT = 2998;
     private static final int DEFAULT_BUFFER_SIZE = 64;
     private static final int DEFAULT_DEVICE_ID = 0;
+    private static final int ITERATIONS = 50;
 
     @CommandLine.Option(
             names = {"-p", "--port"},
@@ -44,17 +45,12 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         TimeUnit.SECONDS.sleep(5);
 
-        var buffer = manager.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
-
-        var string = new NativeString(buffer, 0, DEFAULT_BUFFER_SIZE);
-        string.set("Hello from node " + manager.getLocalId());
-
         var remoteLids = manager.getRemoteLocalIds();
         var workloads = new WorkloadExecutor[remoteLids.length];
         var executor  = (ThreadPoolExecutor) Executors.newFixedThreadPool(remoteLids.length);
 
         for (short remoteLid : remoteLids) {
-            executor.submit(new WorkloadExecutor(manager, buffer, 0, remoteLid));
+            executor.submit(new WorkloadExecutor(manager, ITERATIONS, remoteLid));
         }
 
         TimeUnit.SECONDS.sleep(5);
@@ -69,30 +65,49 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         manager.shutdown();
 
-        buffer.close();
-
         return null;
 
     }
 
     private class WorkloadExecutor implements Runnable {
-        private DynamicConnectionManager manager;
+        private DynamicConnectionManager dcm;
         private RegisteredBuffer data;
         private long offset;
         private short remoteLocalId;
+        private int iterations = 1;
 
-        public WorkloadExecutor(DynamicConnectionManager manager, RegisteredBuffer data, long offset, short remoteLocalId) {
-            this.manager = manager;
+        public WorkloadExecutor(DynamicConnectionManager dcm, RegisteredBuffer data, long offset, short remoteLocalId) {
+            this.dcm = dcm;
             this.data = data;
             this.offset = offset;
             this.remoteLocalId = remoteLocalId;
         }
 
+        public WorkloadExecutor(DynamicConnectionManager dcm, int iterations, short remoteLocalId) {
+            this.dcm = dcm;
+            this.remoteLocalId = remoteLocalId;
+            this.iterations = iterations;
+
+            this.offset = 0;
+            this.data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
+            data.clear();
+        }
+
         @Override
         public void run() {
+            var string = new NativeString(data, 0, DEFAULT_BUFFER_SIZE);
+
             LOGGER.debug("TRY REMOTE WRITE {}", remoteLocalId);
-            manager.remoteWrite(data, offset, DEFAULT_BUFFER_SIZE, remoteLocalId);
+
+            for(int i = 0; i < iterations; i++) {
+                string.set("Node " + dcm.getLocalId() + " iter " + (i + 1));
+
+                dcm.remoteWrite(data, offset, DEFAULT_BUFFER_SIZE, remoteLocalId);
+            }
+
             LOGGER.info("Remote write complete {}", remoteLocalId);
+
+            data.close();
         }
     }
 }
