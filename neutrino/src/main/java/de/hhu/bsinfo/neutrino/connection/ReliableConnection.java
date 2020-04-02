@@ -106,6 +106,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         var wrId = postSend(sendWorkRequest);
 
         scatterGatherElement.releaseInstance();
+        sendWorkRequest.releaseInstance();
 
         return wrId;
     }
@@ -126,6 +127,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         var wrId = postSend(sendWorkRequest);
 
         scatterGatherElement.releaseInstance();
+        sendWorkRequest.releaseInstance();
 
         return wrId;
     }
@@ -149,6 +151,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         var wrId = postReceive(receiveWorkRequest);
 
         scatterGatherElement.releaseInstance();
+        receiveWorkRequest.releaseInstance();
 
         return wrId;
     }
