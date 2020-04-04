@@ -33,6 +33,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final int MAX_SEND_WORK_REQUESTS = 500;
     private static final int MAX_RECEIVE_WORK_REQUESTS = 500;
 
+    private static final int SEND_COMPLETION_QUEUE_SIZE = 1000;
+    private static final int RECEIVE_COMPLETION_QUEUE_SIZE = 1000;
+
     private static final long BUFFER_ACK_TIMEOUT = 200;
 
     private final DynamicConnectionManager dcm;

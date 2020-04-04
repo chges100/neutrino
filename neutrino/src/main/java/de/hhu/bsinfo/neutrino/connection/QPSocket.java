@@ -10,9 +10,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 public abstract class QPSocket {
     private static final Logger LOGGER = LoggerFactory.getLogger(QPSocket.class);
 
-    protected final int completionQueueSize = 100;
-    protected final int sendQueueSize = 100;
-    protected final int receiveQueueSize = 100;
+    protected int sendCompletionQueueSize = 100;
+    protected int receiveCompletionQueueSize = 100;
+
+    protected int sendQueueSize = 100;
+    protected int receiveQueueSize = 100;
 
     private final DeviceContext deviceContext;
 
@@ -34,15 +36,63 @@ public abstract class QPSocket {
             throw new IOException("Cannot query port");
         }
 
-        sendCompletionQueue = deviceContext.getContext().createCompletionQueue(completionQueueSize);
+        sendCompletionQueue = deviceContext.getContext().createCompletionQueue(sendCompletionQueueSize);
         if(sendCompletionQueue == null) {
             throw new IOException("Cannot create completion queue");
         }
 
-        receiveCompletionQueue = deviceContext.getContext().createCompletionQueue(completionQueueSize);
+        receiveCompletionQueue = deviceContext.getContext().createCompletionQueue(receiveCompletionQueueSize);
         if(receiveCompletionQueue == null) {
             throw new IOException("Cannot create completion queue");
         }
+
+        sendWrIdProvider = new AtomicInteger(0);
+        receiveWrIdProvider = new AtomicInteger(0);
+    }
+
+    protected QPSocket(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, int sendCompletionQueueSize, int receiveCompletionQueueSize) throws IOException {
+
+        this.deviceContext = deviceContext;
+        this.sendQueueSize = sendQueueSize;
+        this.receiveQueueSize = receiveQueueSize;
+        this.sendCompletionQueueSize = sendCompletionQueueSize;
+        this.receiveCompletionQueueSize = receiveCompletionQueueSize;
+
+        portAttributes = deviceContext.getContext().queryPort(1);
+        if(portAttributes == null) {
+            throw new IOException("Cannot query port");
+        }
+
+        sendCompletionQueue = deviceContext.getContext().createCompletionQueue(sendCompletionQueueSize);
+        if(sendCompletionQueue == null) {
+            throw new IOException("Cannot create completion queue");
+        }
+
+        receiveCompletionQueue = deviceContext.getContext().createCompletionQueue(receiveCompletionQueueSize);
+        if(receiveCompletionQueue == null) {
+            throw new IOException("Cannot create completion queue");
+        }
+
+        sendWrIdProvider = new AtomicInteger(0);
+        receiveWrIdProvider = new AtomicInteger(0);
+    }
+
+    protected QPSocket(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, CompletionQueue sendCompletionQueue, CompletionQueue receiveCompletionQueue) throws IOException {
+
+        this.deviceContext = deviceContext;
+        this.sendQueueSize = sendQueueSize;
+        this.receiveQueueSize = receiveQueueSize;
+
+        portAttributes = deviceContext.getContext().queryPort(1);
+        if(portAttributes == null) {
+            throw new IOException("Cannot query port");
+        }
+
+        this.sendCompletionQueue = sendCompletionQueue;
+        this.receiveCompletionQueue = receiveCompletionQueue;
+
+        this.sendCompletionQueueSize = sendCompletionQueue.getMaxElements();
+        this.receiveCompletionQueueSize = receiveCompletionQueue.getMaxElements();
 
         sendWrIdProvider = new AtomicInteger(0);
         receiveWrIdProvider = new AtomicInteger(0);

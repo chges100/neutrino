@@ -195,6 +195,5 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Unreliable Datagram closed");
 
-
     }
 }

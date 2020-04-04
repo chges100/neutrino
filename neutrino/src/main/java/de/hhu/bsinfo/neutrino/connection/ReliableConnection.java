@@ -44,6 +44,34 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         }
     }
 
+    public ReliableConnection(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, int sendCompletionQueueSize, int receiveCompletionQueueSize) throws IOException {
+
+        super(deviceContext,sendQueueSize, receiveQueueSize, sendCompletionQueueSize, receiveCompletionQueueSize);
+
+        id = idCounter.getAndIncrement();
+        LOGGER.info("Create reliable connection with id {}", id);
+
+        queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
+                QueuePair.Type.RC, sendCompletionQueue, receiveCompletionQueue, sendQueueSize, receiveQueueSize, 1, 1).build());
+        if(queuePair == null) {
+            throw new IOException("Cannot create queue pair");
+        }
+    }
+
+    public ReliableConnection(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, CompletionQueue sendCompletionQueue, CompletionQueue receiveCompletionQueue) throws IOException {
+
+        super(deviceContext, sendQueueSize, receiveQueueSize, sendCompletionQueue, receiveCompletionQueue);
+
+        id = idCounter.getAndIncrement();
+        LOGGER.info("Create reliable connection with id {}", id);
+
+        queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
+                QueuePair.Type.RC, sendCompletionQueue, receiveCompletionQueue, sendQueueSize, receiveQueueSize, 1, 1).build());
+        if(queuePair == null) {
+            throw new IOException("Cannot create queue pair");
+        }
+    }
+
     @Override
     public void init() throws IOException {
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildInitAttributesRC((short) 0, (byte) 1, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE))) {
