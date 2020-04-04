@@ -206,7 +206,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     private boolean handshake(MessageType msgType, long timeOut) throws IOException{
         LOGGER.info("Handshake of connection {} with message {} started", getId(), msgType);
 
-        var message = new Message(getDeviceContext(), msgType, "");
+        var message = new Message(getDeviceContext(), msgType);
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
         receiveBuffer.clear();
 

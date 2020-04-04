@@ -109,26 +109,26 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void sendConnectionRequest(RCInformation localQP, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.CONNECTION_REQUEST, localQP.getPortNumber() + ":" + localQP.getLocalId() + ":" + localQP.getQueuePairNumber(), remoteLocalId));
+        executor.submit(new OutgoingMessageHandler(MessageType.CONNECTION_REQUEST, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
         LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
     }
 
     protected void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_INFO, localId + ":" + bufferInformation.getAddress() + ":" + bufferInformation.getCapacity() + ":" + bufferInformation.getRemoteKey(), remoteLocalId));
+        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
         LOGGER.trace("Send buffer info to {}", remoteLocalId);
     }
 
     protected void sendDisconnect(short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.DISCONNECT, localId + "", remoteLocalId));
+        executor.submit(new OutgoingMessageHandler(MessageType.DISCONNECT, remoteLocalId, localId));
         LOGGER.trace("Send disconnect to {}", remoteLocalId);
     }
 
     protected void sendBufferAck(short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_ACK, localId + "", remoteLocalId));
+        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_ACK, remoteLocalId, localId));
         LOGGER.trace("Send Buffer ack to {}", remoteLocalId);
     }
 
-    protected void sendMessage(MessageType msgType, String payload, UDInformation remoteInfo) {
+    protected void sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
         var sge = sendSGEProvider.getSGE();
         if(sge == null) {
             LOGGER.error("Cannot post another send request");
@@ -261,9 +261,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     private class IncomingMessageHandler implements Runnable {
         private final MessageType msgType;
-        private final String payload;
+        private final long[] payload;
 
-        IncomingMessageHandler(MessageType msgType, String payload) {
+        IncomingMessageHandler(MessageType msgType, long... payload) {
             this.msgType = msgType;
             this.payload = payload;
         }
@@ -292,8 +292,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         private void handleConnectionRequest() {
 
-            var split = payload.split(":");
-            var remoteInfo = new RCInformation(Byte.parseByte(split[0]), Short.parseShort(split[1]), Integer.parseInt(split[2]));
+            var remoteInfo = new RCInformation((byte) payload[0], (short) payload[1], (int) payload[2]);
             var remoteLocalId = remoteInfo.getLocalId();
 
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
@@ -320,9 +319,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleBufferInfo() {
-            var split = payload.split(":");
-            var bufferInfo = new BufferInformation(Long.parseLong(split[1]), Long.parseLong(split[2]), Integer.parseInt(split[3]));
-            var remoteLid = Short.parseShort(split[0]);
+            var bufferInfo = new BufferInformation(payload[1], payload[2], (int) payload[3]);
+            var remoteLid = (short) payload[0];
 
             LOGGER.trace("Received new remote buffer information from {}: {}", remoteLid, bufferInfo);
 
@@ -332,8 +330,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleBufferAck() {
-            var split = payload.split(":");
-            var remoteLid = Short.parseShort(split[0]);
+            var remoteLid = (short) payload[0];
 
             dcm.localBufferHandler.setBufferInfoAck(remoteLid);
         }
@@ -345,10 +342,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     private class OutgoingMessageHandler implements Runnable {
         private final MessageType msgType;
-        private final String payload;
+        private final long[] payload;
         private final short remoteLocalId;
 
-        OutgoingMessageHandler(MessageType msgType, String payload, short remoteLocalId) {
+        OutgoingMessageHandler(MessageType msgType, short remoteLocalId, long ... payload) {
             this.msgType = msgType;
             this.payload = payload;
             this.remoteLocalId = remoteLocalId;
@@ -382,7 +379,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             boolean bufferAck = false;
 
             while (!bufferAck) {
-                sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
+                sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
 
                 var start = System.currentTimeMillis();
 
@@ -397,15 +394,15 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleConnectionRequest() {
-            sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
+            sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
         }
 
         private void handleDisconnect() {
-            sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
+            sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
         }
 
         private void handleBufferAck() {
-            sendMessage(msgType, payload, remoteHandlerInfos.get(remoteLocalId));
+            sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
         }
     }
 }

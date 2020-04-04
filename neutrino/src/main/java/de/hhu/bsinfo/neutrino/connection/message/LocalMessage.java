@@ -5,7 +5,7 @@ import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 
 public class LocalMessage extends BaseMessage<LocalBuffer> {
-    public LocalMessage(LocalBuffer byteBuffer, MessageType messageType, String payload) {
+    public LocalMessage(LocalBuffer byteBuffer, MessageType messageType, long ... payload) {
         super(byteBuffer, messageType, payload);
     }
 

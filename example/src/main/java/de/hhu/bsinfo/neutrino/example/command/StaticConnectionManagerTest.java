@@ -90,7 +90,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Connection {} created", connection.getId());
 
-        var message = new Message(connection.getDeviceContext(), MessageType.COMMON, "2342535:322554:245");
+        var message = new Message(connection.getDeviceContext(), MessageType.COMMON, 2342535, 322554, 245);
 
         connection.send(message.getByteBuffer());
 
@@ -122,10 +122,9 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         var message = new Message(buffer);
 
-        var string = message.getPayload();
-        String[] parts = string.split(":");
+        var payload = message.getPayload();
 
-        var bufferInformation = new BufferInformation(Long.parseLong(parts[0]), Long.parseLong(parts[1]), Integer.parseInt(parts[2]));
+        var bufferInformation = new BufferInformation(payload[0], payload[1], (int) payload[2]);
 
         LOGGER.info("Received: {}", message);
 
@@ -148,7 +147,7 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         LOGGER.info("Unreliable datagram created");
 
-        var message = new Message(unreliableDatagram.getDeviceContext(), MessageType.COMMON, "2342535:322554:245");
+        var message = new Message(unreliableDatagram.getDeviceContext(), MessageType.COMMON, 2342535, 322554, 245);
 
         unreliableDatagram.send(message.getByteBuffer(), remoteInformation);
 
@@ -184,10 +183,9 @@ public class StaticConnectionManagerTest implements Callable<Void> {
 
         var message = new LocalMessage(buffer, UnreliableDatagram.UD_Receive_Offset);
 
-        var string = message.getPayload();
-        String[] parts = string.split(":");
+        var payload = message.getPayload();
 
-        var bufferInformation = new BufferInformation(Long.parseLong(parts[0]), Long.parseLong(parts[1]), Integer.parseInt(parts[2]));
+        var bufferInformation = new BufferInformation(payload[0], payload[1], (int) payload[2]);
 
         LOGGER.info("Received: {}", message);
 
