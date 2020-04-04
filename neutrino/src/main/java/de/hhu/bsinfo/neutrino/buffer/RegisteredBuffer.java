@@ -10,6 +10,8 @@ import de.hhu.bsinfo.neutrino.verbs.ScatterGatherElement;
 import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest.SendFlag;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
+
 public class RegisteredBuffer extends LocalBuffer implements AutoCloseable {
 
     private final MemoryRegion memoryRegion;

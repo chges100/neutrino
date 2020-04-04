@@ -2,7 +2,6 @@ package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Connectable;
-import de.hhu.bsinfo.neutrino.connection.interfaces.Executor;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
@@ -11,17 +10,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.StringJoiner;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.StampedLock;
 
-public class ReliableConnection extends QPSocket implements Connectable<Boolean, RCInformation>, Executor {
+public class ReliableConnection extends QPSocket implements Connectable<Boolean, RCInformation> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
     private static final short INVALID_LID = Short.MAX_VALUE;
     private static final int BATCH_SIZE = 10;
     private static final long HANDSHAKE_CONNECT_TIMEOUT = 2000;
     private static final long HANDSHAKE_DISCONNECT_TIMEOUT = 200;
+    private static final int HANDSHAKE_POLL_QUEUE_TIMEOUT = 40;
 
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private final int id;
@@ -30,9 +35,13 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
     private final AtomicBoolean changeConnection = new AtomicBoolean(false);
 
+    private final RCHandshakeQueue handshakeQueue;
+
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
         super(deviceContext);
+
+        handshakeQueue = new RCHandshakeQueue();
 
         id = idCounter.getAndIncrement();
         LOGGER.info("Create reliable connection with id {}", id);
@@ -48,6 +57,8 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         super(deviceContext,sendQueueSize, receiveQueueSize, sendCompletionQueueSize, receiveCompletionQueueSize);
 
+        handshakeQueue = new RCHandshakeQueue();
+
         id = idCounter.getAndIncrement();
         LOGGER.info("Create reliable connection with id {}", id);
 
@@ -61,6 +72,8 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     public ReliableConnection(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, CompletionQueue sendCompletionQueue, CompletionQueue receiveCompletionQueue) throws IOException {
 
         super(deviceContext, sendQueueSize, receiveQueueSize, sendCompletionQueue, receiveCompletionQueue);
+
+        handshakeQueue = new RCHandshakeQueue();
 
         id = idCounter.getAndIncrement();
         LOGGER.info("Create reliable connection with id {}", id);
@@ -119,11 +132,19 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return true;
     }
 
-    public long send(RegisteredBuffer data) {
+    public long send(RegisteredBuffer data) throws IOException  {
         return send(data, 0,  data.capacity());
     }
 
-    public long send(RegisteredBuffer data, long offset, long length) {
+    public long send(RegisteredBuffer data, long offset, long length) throws IOException {
+        if (isConnected.get()) {
+             return internalSend(data, offset, length);
+        } else {
+            throw new IOException("Could not send data - RC is not connected yet.");
+        }
+    }
+
+    private long internalSend(RegisteredBuffer data, long offset, long length) {
         var scatterGatherElement = (ScatterGatherElement) Verbs.getPoolableInstance(ScatterGatherElement.class);
         scatterGatherElement.setAddress(data.getHandle() + offset);
         scatterGatherElement.setLength((int) length);
@@ -143,8 +164,15 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, sge).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(id).build();
     }
 
-    @Override
-    public long execute(RegisteredBuffer data, SendWorkRequest.OpCode opCode, long offset, long length, long remoteAddress, int remoteKey, long remoteOffset) {
+    public long execute(RegisteredBuffer data, SendWorkRequest.OpCode opCode, long offset, long length, long remoteAddress, int remoteKey, long remoteOffset) throws IOException  {
+        if(isConnected.get()) {
+            return internalExecute(data, opCode, offset, length, remoteAddress, remoteKey, remoteOffset);
+        } else {
+            throw new IOException("Could not execute on remote - RC is not connected yet.");
+        }
+    }
+
+    private long internalExecute(RegisteredBuffer data, SendWorkRequest.OpCode opCode, long offset, long length, long remoteAddress, int remoteKey, long remoteOffset) {
         var scatterGatherElement = (ScatterGatherElement) Verbs.getPoolableInstance(ScatterGatherElement.class);
         scatterGatherElement.setAddress(data.getHandle() + offset);
         scatterGatherElement.setLength((int) length);
@@ -164,11 +192,19 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return new SendWorkRequest.RdmaBuilder(opCode, sge, remoteAddress, remoteKey).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(id).build();
     }
 
-    public long receive(RegisteredBuffer data) {
+    public long receive(RegisteredBuffer data) throws IOException {
         return receive(data, 0, data.capacity());
     }
 
-    public long receive(RegisteredBuffer data, long offset, long length) {
+    public long receive(RegisteredBuffer data, long offset, long length) throws IOException {
+        if(isConnected.get()) {
+            return internalReceive(data, offset, length);
+        } else {
+            throw new IOException("Could not receive - RC is not connected yet.");
+        }
+    }
+
+    private long internalReceive(RegisteredBuffer data, long offset, long length) {
         var scatterGatherElement = (ScatterGatherElement) Verbs.getPoolableInstance(ScatterGatherElement.class);
         scatterGatherElement.setAddress(data.getHandle() + offset);
         scatterGatherElement.setLength((int) length);
@@ -231,65 +267,47 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return completionArray.getLength();
     }
 
-    private boolean handshake(MessageType msgType, long timeOut) throws IOException{
+    private boolean handshake(MessageType msgType, long timeOut) throws IOException {
         LOGGER.info("Handshake of connection {} with message {} started", getId(), msgType);
 
         var message = new Message(getDeviceContext(), msgType);
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
         receiveBuffer.clear();
 
-        var receiveWrId = receive(receiveBuffer);
+
+        var receiveWrId = internalReceive(receiveBuffer, 0, receiveBuffer.capacity());
         long sendWrId = 0;
 
         boolean isTimeOut = false;
 
 
         boolean isSent = false;
-        boolean isPosted = false;
+        boolean isReceived = false;
         var startTime = System.currentTimeMillis();
 
-        while(!isSent && !isTimeOut) {
+        internalSend(message.getByteBuffer(), 0, message.getNativeSize());
 
-            if(!isPosted) {
-                sendWrId = send(message.getByteBuffer());
-                isPosted = true;
-            }
+        while(!(isSent && isReceived) && !isTimeOut) {
 
             if(System.currentTimeMillis() - startTime > timeOut) {
                 isTimeOut = true;
-            }
+            } else {
+                try {
+                    var value = handshakeQueue.poll(HANDSHAKE_POLL_QUEUE_TIMEOUT, TimeUnit.MILLISECONDS);
 
-            var wcs = pollSendCompletions(BATCH_SIZE);
-            for(int i = 0; i < wcs.getLength(); i++) {
-                if(wcs.get(i).getId() == sendWrId) {
-                    if(wcs.get(i).getStatus() == WorkCompletion.Status.SUCCESS) {
+                    if(value == RCHandshakeQueue.SEND_COMPLETE) {
                         isSent = true;
-                    } else {
-                        isPosted = false;
-                    }
-
-                }
-            }
-        }
-
-        boolean isReceived = false;
-
-        while(!isReceived && !isTimeOut) {
-
-            if(System.currentTimeMillis() - startTime > timeOut) {
-                isTimeOut = true;
-            }
-
-            var wcs = pollReceiveCompletions(BATCH_SIZE);
-            for(int i = 0; i < wcs.getLength(); i++) {
-                if(wcs.get(i).getId() == receiveWrId) {
-                    var msg = new Message(receiveBuffer);
-                    if(msg.getMessageType() == msgType) {
+                    } else if(value == RCHandshakeQueue.RECEIVE_COMPLETE) {
                         isReceived = true;
+                    } else if(value == RCHandshakeQueue.SEND_ERROR) {
+                        internalSend(message.getByteBuffer(), 0, message.getNativeSize());
                     }
+                } catch (Exception e) {
+                    LOGGER.trace("Exception accured during polling: {}", e);
                 }
             }
         }
+
 
         if(!isTimeOut) {
             LOGGER.info("Handshake of connection {}  with message {} finished", getId(), msgType);
@@ -356,5 +374,45 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
                 .add("portNumber=" + 1)
                 .add("queuePairNumber=" + queuePair.getQueuePairNumber())
                 .toString();
+    }
+
+    public RCHandshakeQueue getHandshakeQueue() {
+        return handshakeQueue;
+    }
+
+
+    public class RCHandshakeQueue  {
+        protected static final int SEND_COMPLETE = 0;
+        protected static final int RECEIVE_COMPLETE = 1;
+        protected static final int SEND_ERROR = 2;
+
+        protected final ArrayBlockingQueue<Integer> queue;
+
+        private static final int CAPACITY = 5;
+
+        public RCHandshakeQueue() {
+            this.queue = new ArrayBlockingQueue<>(CAPACITY);
+        }
+
+        public void pushSendComplete() {
+            queue.add(SEND_COMPLETE);
+        }
+
+        public void pushReceiveComplete() {
+            queue.add(RECEIVE_COMPLETE);
+        }
+
+        public void pushSendError() {
+            queue.add(SEND_ERROR);
+        }
+
+        public int poll(int timeout, TimeUnit unit) throws InterruptedException {
+            return queue.poll(timeout, unit);
+        }
+
+        public int poll() {
+            return queue.poll();
+        }
+
     }
 }

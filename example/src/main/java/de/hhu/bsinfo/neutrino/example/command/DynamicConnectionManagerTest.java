@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
+import java.io.IOException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -43,7 +44,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var manager = new DynamicConnectionManager(port);
         manager.init();
 
-        TimeUnit.SECONDS.sleep(5);
+        TimeUnit.SECONDS.sleep(2);
 
         var remoteLids = manager.getRemoteLocalIds();
         var workloads = new WorkloadExecutor[remoteLids.length];
@@ -53,7 +54,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             executor.submit(new WorkloadExecutor(manager, ITERATIONS, remoteLid));
         }
 
-        TimeUnit.SECONDS.sleep(5);
+        TimeUnit.SECONDS.sleep(1);
 
 
         try {
@@ -98,12 +99,16 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             var string = new NativeString(data, 0, DEFAULT_BUFFER_SIZE);
 
             LOGGER.debug("TRY REMOTE WRITE {}", remoteLocalId);
+            try {
+                for(int i = 0; i < iterations; i++) {
+                    string.set("Node " + dcm.getLocalId() + " iter " + (i + 1));
 
-            for(int i = 0; i < iterations; i++) {
-                string.set("Node " + dcm.getLocalId() + " iter " + (i + 1));
-
-                dcm.remoteWrite(data, offset, DEFAULT_BUFFER_SIZE, remoteLocalId);
+                    dcm.remoteWrite(data, offset, DEFAULT_BUFFER_SIZE, remoteLocalId);
+                }
+            } catch (IOException e) {
+                LOGGER.error("Could not complete workload on {}", remoteLocalId);
             }
+
 
             LOGGER.info("Remote write complete {}", remoteLocalId);
 

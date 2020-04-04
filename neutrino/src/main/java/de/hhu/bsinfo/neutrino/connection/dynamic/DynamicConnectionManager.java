@@ -1,6 +1,5 @@
 package de.hhu.bsinfo.neutrino.connection.dynamic;
 
-import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
@@ -8,8 +7,8 @@ import de.hhu.bsinfo.neutrino.connection.util.AtomicReadWriteLockArray;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.data.NativeString;
 import de.hhu.bsinfo.neutrino.verbs.*;
-import org.agrona.collections.Int2IntHashMap;
 import org.agrona.collections.Int2ObjectHashMap;
+import org.agrona.collections.Long2ObjectHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,14 +28,20 @@ public class DynamicConnectionManager {
     private static final long CREATE_CONNECTION_TIMEOUT = 100;
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
+    private static final int RC_COMPLETION_QUEUE_SIZE = 2000;
+    private static final int RC_QUEUE_PAIR_SIZE = 200;
+
     private final short localId;
 
     private final ArrayList<DeviceContext> deviceContexts;
 
     protected DynamicConnectionHandler dch;
 
-    protected final Int2ObjectHashMap<ReliableConnection> connections;
 
+    protected final CompletionQueue sendCompletionQueue;
+    protected final CompletionQueue receiveCompletionQueue;
+    protected final Int2ObjectHashMap<ReliableConnection> connections;
+    protected final Int2ObjectHashMap<ReliableConnection> qpToConnection;
 
     protected RemoteBufferHandler remoteBufferHandler;
     protected LocalBufferHandler localBufferHandler;
@@ -56,6 +61,7 @@ public class DynamicConnectionManager {
         deviceContexts = new ArrayList<>();
 
         connections = new Int2ObjectHashMap<>();
+        qpToConnection = new Int2ObjectHashMap<>();
 
         rwLocks = new AtomicReadWriteLockArray(MAX_LID);
 
@@ -71,6 +77,16 @@ public class DynamicConnectionManager {
 
         if(deviceContexts.isEmpty()) {
             throw new IOException("Could not initialize any Infiniband device");
+        }
+
+        sendCompletionQueue = deviceContexts.get(0).getContext().createCompletionQueue(RC_COMPLETION_QUEUE_SIZE);
+        if(sendCompletionQueue == null) {
+            throw new IOException("Cannot create completion queue");
+        }
+
+        receiveCompletionQueue = deviceContexts.get(0).getContext().createCompletionQueue(RC_COMPLETION_QUEUE_SIZE);
+        if(sendCompletionQueue == null) {
+            throw new IOException("Cannot create completion queue");
         }
 
         UDPPort = port;
@@ -91,27 +107,27 @@ public class DynamicConnectionManager {
         udInformationHandler.start();
     }
 
-    public void remoteWriteToAll(RegisteredBuffer data, long offset, long length) {
+    public void remoteWriteToAll(RegisteredBuffer data, long offset, long length) throws IOException {
         for(var remoteLocalId : dch.getRemoteLocalIds()){
             remoteWrite(data, offset, length, remoteLocalId);
         }
     }
 
-    public void remoteReadFromAll(RegisteredBuffer data, long offset, long length) {
+    public void remoteReadFromAll(RegisteredBuffer data, long offset, long length) throws IOException {
         for(var remoteLocalId : dch.getRemoteLocalIds()){
             remoteRead(data, offset, length, remoteLocalId);
         }
     }
 
-    public void remoteWrite(RegisteredBuffer data, long offset, long length, short remoteLocalId) {
+    public void remoteWrite(RegisteredBuffer data, long offset, long length, short remoteLocalId) throws IOException {
         remoteExecute(SendWorkRequest.OpCode.RDMA_WRITE, data, offset, length, remoteLocalId);
     }
 
-    public void remoteRead(RegisteredBuffer data, long offset, long length, short remoteLocalId) {
+    public void remoteRead(RegisteredBuffer data, long offset, long length, short remoteLocalId) throws IOException {
         remoteExecute(SendWorkRequest.OpCode.RDMA_READ, data, offset, length, remoteLocalId);
     }
 
-    private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, short remoteLocalId) {
+    private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, short remoteLocalId) throws IOException {
         boolean connected = false;
         ReliableConnection connection = null;
 
@@ -147,9 +163,10 @@ public class DynamicConnectionManager {
 
         if(locked && !connections.containsKey(remoteLocalId)) {
             try {
-                var connection = new ReliableConnection(deviceContexts.get(0));
+                var connection = new ReliableConnection(deviceContexts.get(0), RC_QUEUE_PAIR_SIZE, RC_QUEUE_PAIR_SIZE, sendCompletionQueue, receiveCompletionQueue);
                 connection.init();
                 connections.put(remoteLocalId, connection);
+                qpToConnection.put(connection.getQueuePair().getQueuePairNumber(), connection);
 
                 var localQP = new RCInformation(connection);
                 dch.sendConnectionRequest(localQP, remoteLocalId);
@@ -266,29 +283,50 @@ public class DynamicConnectionManager {
     private class RCCompletionQueuePollThread extends Thread {
         private boolean isRunning = true;
         private final int batchSize;
+        private final CompletionQueue.WorkCompletionArray completionArray;
 
         public RCCompletionQueuePollThread(int batchSize) {
             this.batchSize = batchSize;
+
+            completionArray = new CompletionQueue.WorkCompletionArray(RC_COMPLETION_QUEUE_POLL_BATCH_SIZE);
         }
 
         @Override
         public void run() {
             try {
                 while(isRunning) {
-                    for(var remoteLocalId : connections.keySet().toArray()) {
-                        var locked = rwLocks.tryReadLock((int) remoteLocalId);
+                    sendCompletionQueue.poll(completionArray);
 
-                        if(locked) {
-                            var connection = connections.get((int) remoteLocalId);
+                    for(int i = 0; i < completionArray.getLength(); i++) {
+                        var completion = completionArray.get(i);
 
-                            if(connection.isConnected()) {
-                                try {
-                                    connection.pollSend(batchSize);
-                                } catch (Exception e) {
-                                    LOGGER.error(e.toString());
-                                }
+                        if(completion.getOpCode() == WorkCompletion.OpCode.SEND) {
+                            var qpNumber = completion.getQueuePairNumber();
+
+                            if(completion.getStatus() == WorkCompletion.Status.SUCCESS) {
+                                qpToConnection.get(qpNumber).getHandshakeQueue().pushSendComplete();
+                            } else {
+                                qpToConnection.get(qpNumber).getHandshakeQueue().pushSendError();
                             }
-                            rwLocks.unlockRead((int) remoteLocalId);
+                        }
+
+                        if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
+                            LOGGER.error("Send Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
+                        }
+
+                    }
+
+                    receiveCompletionQueue.poll(completionArray);
+
+                    for(int i = 0; i < completionArray.getLength(); i++) {
+                        var completion = completionArray.get(i);
+
+                        if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
+                            LOGGER.error("Receive Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
+                        } else {
+                            var qpNumber = completion.getQueuePairNumber();
+                            qpToConnection.get(qpNumber).getHandshakeQueue().pushReceiveComplete();
+
                         }
                     }
                 }

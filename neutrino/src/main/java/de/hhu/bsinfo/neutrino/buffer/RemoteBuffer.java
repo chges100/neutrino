@@ -6,6 +6,8 @@ import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
 import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest.OpCode;
 import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest.SendFlag;
 
+import java.io.IOException;
+
 public class RemoteBuffer {
 
     private final ReliableConnection reliableConnection;
@@ -35,7 +37,7 @@ public class RemoteBuffer {
         return execute(OpCode.RDMA_READ, index, buffer, offset, length);
     }
 
-    public long write(RegisteredBuffer localBuffer) {
+    public long write(RegisteredBuffer localBuffer) throws IOException {
         return execute(OpCode.RDMA_WRITE, localBuffer);
     }
 
@@ -47,8 +49,17 @@ public class RemoteBuffer {
         return execute(operation, 0, buffer, 0, buffer.capacity());
     }
 
-    private long execute(final OpCode operation, long index, RegisteredBuffer buffer, long offset, long length) {
-        return reliableConnection.execute(buffer, operation, offset, length, this.address, this.key, index);
+    private long execute(final OpCode operation, long index, RegisteredBuffer buffer, long offset, long length)  {
+        long ret = 0;
+
+        try {
+            ret = reliableConnection.execute(buffer, operation, offset, length, this.address, this.key, index);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return ret;
+
     }
 
     public long capacity() {
