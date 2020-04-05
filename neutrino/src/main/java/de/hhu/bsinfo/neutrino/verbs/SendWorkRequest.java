@@ -444,7 +444,7 @@ public class SendWorkRequest extends Struct implements Linkable<SendWorkRequest>
 
         public Builder() {}
 
-        public Builder withId(final int id) {
+        public Builder withId(final long id) {
             this.id = id;
             return this;
         }

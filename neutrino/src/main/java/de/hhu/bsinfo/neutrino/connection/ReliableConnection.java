@@ -161,7 +161,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return wrId;
     }
 
-    protected SendWorkRequest buildSendWorkRequest(ScatterGatherElement sge, int id) {
+    protected SendWorkRequest buildSendWorkRequest(ScatterGatherElement sge, long id) {
         return new SendWorkRequest.MessageBuilder(SendWorkRequest.OpCode.SEND, sge).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(id).build();
     }
 
@@ -189,7 +189,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return wrId;
     }
 
-    protected SendWorkRequest buildRDMAWorkRequest(SendWorkRequest.OpCode opCode, ScatterGatherElement sge, long remoteAddress, int remoteKey, int id) {
+    protected SendWorkRequest buildRDMAWorkRequest(SendWorkRequest.OpCode opCode, ScatterGatherElement sge, long remoteAddress, int remoteKey, long id) {
         return new SendWorkRequest.RdmaBuilder(opCode, sge, remoteAddress, remoteKey).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).withId(id).build();
     }
 
@@ -221,7 +221,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return wrId;
     }
 
-    protected ReceiveWorkRequest buildReceiveWorkRequest(ScatterGatherElement sge, int id) {
+    protected ReceiveWorkRequest buildReceiveWorkRequest(ScatterGatherElement sge, long id) {
         return new ReceiveWorkRequest.Builder().withScatterGatherElement(sge).withId(id).build();
     }
 

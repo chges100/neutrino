@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class QPSocket {
     private static final Logger LOGGER = LoggerFactory.getLogger(QPSocket.class);
@@ -24,8 +25,8 @@ public abstract class QPSocket {
 
     protected QueuePair queuePair;
 
-    protected final AtomicInteger sendWrIdProvider;
-    protected final AtomicInteger receiveWrIdProvider;
+    protected final AtomicLong sendWrIdProvider;
+    protected final AtomicLong receiveWrIdProvider;
 
     protected QPSocket(DeviceContext deviceContext) throws IOException {
 
@@ -46,8 +47,8 @@ public abstract class QPSocket {
             throw new IOException("Cannot create completion queue");
         }
 
-        sendWrIdProvider = new AtomicInteger(0);
-        receiveWrIdProvider = new AtomicInteger(0);
+        sendWrIdProvider = new AtomicLong(0);
+        receiveWrIdProvider = new AtomicLong(0);
     }
 
     protected QPSocket(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, int sendCompletionQueueSize, int receiveCompletionQueueSize) throws IOException {
@@ -73,8 +74,8 @@ public abstract class QPSocket {
             throw new IOException("Cannot create completion queue");
         }
 
-        sendWrIdProvider = new AtomicInteger(0);
-        receiveWrIdProvider = new AtomicInteger(0);
+        sendWrIdProvider = new AtomicLong(0);
+        receiveWrIdProvider = new AtomicLong(0);
     }
 
     protected QPSocket(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, CompletionQueue sendCompletionQueue, CompletionQueue receiveCompletionQueue) throws IOException {
@@ -94,8 +95,8 @@ public abstract class QPSocket {
         this.sendCompletionQueueSize = sendCompletionQueue.getMaxElements();
         this.receiveCompletionQueueSize = receiveCompletionQueue.getMaxElements();
 
-        sendWrIdProvider = new AtomicInteger(0);
-        receiveWrIdProvider = new AtomicInteger(0);
+        sendWrIdProvider = new AtomicLong(0);
+        receiveWrIdProvider = new AtomicLong(0);
     }
 
     abstract void init() throws IOException;

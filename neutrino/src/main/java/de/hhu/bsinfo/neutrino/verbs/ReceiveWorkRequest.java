@@ -83,7 +83,7 @@ public class ReceiveWorkRequest extends Struct implements Linkable<ReceiveWorkRe
         private long listHandle;
         private int listLength;
 
-        public Builder withId(final int id) {
+        public Builder withId(final long id) {
             this.id = id;
             return this;
         }

@@ -99,7 +99,7 @@ public class UnreliableDatagram extends QPSocket{
         return postSend(sendWorkRequest);
     }
 
-    protected SendWorkRequest buildSendWorkRequest(ScatterGatherElement sge, UDInformation remoteInfo, int id) {
+    protected SendWorkRequest buildSendWorkRequest(ScatterGatherElement sge, UDInformation remoteInfo, long id) {
         var addressAttributes = new AddressHandle.Attributes.Builder(remoteInfo.getLocalId(), remoteInfo.getPortNumber()).build();
         var addressHandle = getDeviceContext().getProtectionDomain().createAddressHandle(addressAttributes);
 
@@ -121,7 +121,7 @@ public class UnreliableDatagram extends QPSocket{
         return postReceive(receiveWorkRequest);
     }
 
-    protected ReceiveWorkRequest buildReceiveWorkRequest(ScatterGatherElement sge, int id) {
+    protected ReceiveWorkRequest buildReceiveWorkRequest(ScatterGatherElement sge, long id) {
         return new ReceiveWorkRequest.Builder().withScatterGatherElement(sge).withId(id).build();
     }
 
