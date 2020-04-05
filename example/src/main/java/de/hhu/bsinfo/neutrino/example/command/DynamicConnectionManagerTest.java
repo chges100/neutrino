@@ -48,6 +48,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var statistics = new StatisticManager();
         statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_WRITE);
+        statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_BYTES_WRITTEN);
 
         manager.registerStatisticManager(statistics);
 
@@ -61,7 +62,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             executor.submit(new WorkloadExecutor(manager, ITERATIONS, remoteLid));
         }
 
-        TimeUnit.SECONDS.sleep(1);
+        TimeUnit.SECONDS.sleep(2);
 
         statistics.shutDown();
 

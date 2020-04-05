@@ -21,14 +21,16 @@ public class Statistic {
     }
 
     public enum Metric {
-        SEND_MSG,
-        RECEIVE_MSG,
+        SEND,
+        RECEIVE,
         BYTES_SEND,
         BYTES_RECEIVED,
         RDMA_WRITE,
         RDMA_READ,
         RDMA_BYTES_WRITTEN,
         RDMA_BYTES_READ,
+        SEND_QUEUE_SUCCESS,
+        RECEIVE_QUEUE_SUCCESS,
         SEND_QUEUE_ERRORS,
         RECEIVE_QUEUE_ERRORS
     }

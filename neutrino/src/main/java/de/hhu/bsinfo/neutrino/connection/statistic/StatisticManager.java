@@ -48,13 +48,14 @@ public class StatisticManager {
     }
 
     public void printResults() {
-        final String[] string = {"Print out statistic results:\n\n"};
+        final String[] string = {"\n\n*** Print out statistic results: ***\n\n"};
 
         statistics.forEach(statistic -> {
-            string[0] += "Statistic: " + statistic.keyType + ":" + statistic.metric + "\n";
+            string[0] += "Statistic:\t" + statistic.keyType + "\t" + statistic.metric + "\n";
             statistic.statistic.forEach((key, value) -> {
-                string[0] += key + ":" + value + "\n";
+                string[0] += "\t\t" + key + "\t\t" + value + "\n";
             });
+            string[0] += "\n";
         });
 
         LOGGER.info(string[0]);
