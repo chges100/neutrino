@@ -267,6 +267,24 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return completionArray.getLength();
     }
 
+    public void handleSendError() throws IOException {
+        if(queuePair.getState() == QueuePair.State.SQE) {
+
+            if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToSendAttributesRC())) {
+                throw new IOException("Unable to move queue pair into RTS state");
+            }
+
+            LOGGER.info("Recorvered queue pair from SQE into RTS state");
+        }
+    }
+
+    public void resetFromError() throws IOException {
+        if(queuePair.getState() == QueuePair.State.ERR) {
+            reset();
+            init();
+        }
+    }
+
     private boolean handshake(MessageType msgType, long timeOut) throws IOException {
         LOGGER.info("Handshake of connection {} with message {} started", getId(), msgType);
 
