@@ -3,6 +3,9 @@ package de.hhu.bsinfo.neutrino.connection.dynamic;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
+import de.hhu.bsinfo.neutrino.connection.statistic.RAWData;
+import de.hhu.bsinfo.neutrino.connection.statistic.Statistic;
+import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.connection.util.AtomicReadWriteLockArray;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.data.NativeString;
@@ -15,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
@@ -54,6 +58,8 @@ public class DynamicConnectionManager {
 
     private final int UDPPort;
 
+    private final List<StatisticManager> statisticManagers;
+
 
 
     public DynamicConnectionManager(int port) throws IOException {
@@ -62,6 +68,8 @@ public class DynamicConnectionManager {
 
         connections = new Int2ObjectHashMap<>();
         qpToConnection = new Int2ObjectHashMap<>();
+
+        statisticManagers = new ArrayList<>();
 
         rwLocks = new AtomicReadWriteLockArray(MAX_LID);
 
@@ -280,6 +288,10 @@ public class DynamicConnectionManager {
         LOGGER.info(out);
     }
 
+    public void registerStatisticManager(StatisticManager manager) {
+        statisticManagers.add(manager);
+    }
+
     private class RCCompletionQueuePollThread extends Thread {
         private boolean isRunning = true;
         private final int batchSize;
@@ -299,20 +311,37 @@ public class DynamicConnectionManager {
 
                     for(int i = 0; i < completionArray.getLength(); i++) {
                         var completion = completionArray.get(i);
+                        var rawData = new RAWData();
+                        var connection = qpToConnection.get(completion.getQueuePairNumber());
+                        var qpNumber = completion.getQueuePairNumber();
+
+                        rawData.setKeyTypes(Statistic.KeyType.QP_NUM, Statistic.KeyType.CONNECTION_ID, Statistic.KeyType.REMOTE_LID);
+                        rawData.setKeyData(completion.getQueuePairNumber(), connection.getId(), connection.getRemoteLocalId());
 
                         if(completion.getOpCode() == WorkCompletion.OpCode.SEND) {
-                            var qpNumber = completion.getQueuePairNumber();
 
                             if(completion.getStatus() == WorkCompletion.Status.SUCCESS) {
-                                qpToConnection.get(qpNumber).getHandshakeQueue().pushSendComplete();
+                                connection.getHandshakeQueue().pushSendComplete();
+
                             } else {
-                                qpToConnection.get(qpNumber).getHandshakeQueue().pushSendError();
+                                connection.getHandshakeQueue().pushSendError();
+                            }
+                        } else if(completion.getOpCode() == WorkCompletion.OpCode.RDMA_WRITE) {
+                            if(completion.getStatus() == WorkCompletion.Status.SUCCESS) {
+                                rawData.setMetrics(Statistic.Metric.RDMA_WRITE);
+                                rawData.setMetricsData(1);
+
+                                for(var statisticManager : statisticManagers) {
+                                    statisticManager.pushRAWData(rawData);
+                                }
                             }
                         }
 
                         if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
                             LOGGER.error("Send Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
                         }
+
+
 
                     }
 

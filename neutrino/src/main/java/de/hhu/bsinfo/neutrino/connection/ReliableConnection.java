@@ -22,6 +22,7 @@ import java.util.concurrent.locks.StampedLock;
 public class ReliableConnection extends QPSocket implements Connectable<Boolean, RCInformation> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
+
     private static final short INVALID_LID = Short.MAX_VALUE;
     private static final int BATCH_SIZE = 10;
     private static final long HANDSHAKE_CONNECT_TIMEOUT = 2000;

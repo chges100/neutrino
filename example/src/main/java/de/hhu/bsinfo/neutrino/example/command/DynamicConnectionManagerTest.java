@@ -2,6 +2,8 @@ package de.hhu.bsinfo.neutrino.example.command;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
+import de.hhu.bsinfo.neutrino.connection.statistic.Statistic;
+import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.data.NativeString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +46,11 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var manager = new DynamicConnectionManager(port);
         manager.init();
 
+        var statistics = new StatisticManager();
+        statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_WRITE);
+
+        manager.registerStatisticManager(statistics);
+
         TimeUnit.SECONDS.sleep(2);
 
         var remoteLids = manager.getRemoteLocalIds();
@@ -56,6 +63,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         TimeUnit.SECONDS.sleep(1);
 
+        statistics.shutDown();
+
 
         try {
             executor.shutdownNow();
@@ -65,6 +74,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         }
 
         manager.shutdown();
+
+        statistics.printResults();
 
         return null;
 
