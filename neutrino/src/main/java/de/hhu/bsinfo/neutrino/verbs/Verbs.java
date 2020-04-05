@@ -1,5 +1,6 @@
 package de.hhu.bsinfo.neutrino.verbs;
 
+import de.hhu.bsinfo.neutrino.connection.util.ConcurrentRingBufferPool;
 import de.hhu.bsinfo.neutrino.struct.Result;
 import de.hhu.bsinfo.neutrino.util.NativeLibrary;
 import de.hhu.bsinfo.neutrino.util.Poolable;
@@ -12,28 +13,27 @@ public final class Verbs {
     private static final int DEFAULT_POOL_SIZE = 1024;
 
     @SuppressWarnings("FieldNamingConvention")
-    private static final Map<Class<? extends Poolable>, ThreadLocal<RingBufferPool<Poolable>>> poolMap = new HashMap<>();
+    private static final Map<Class<? extends Poolable>, ConcurrentRingBufferPool<Poolable>> poolMap = new HashMap<>();
 
     static {
         NativeLibrary.load("neutrino");
 
-        poolMap.put(Result.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, Result::new)));
-        poolMap.put(AsyncEvent.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, AsyncEvent::new)));
-        poolMap.put(WorkCompletion.TagMatchingInfo.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, WorkCompletion.TagMatchingInfo::new)));
-        poolMap.put(SendWorkRequest.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, SendWorkRequest::new)));
-        poolMap.put(ReceiveWorkRequest.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, ReceiveWorkRequest::new)));
-        poolMap.put(ScatterGatherElement.class, ThreadLocal.withInitial(() -> new RingBufferPool<>(DEFAULT_POOL_SIZE, ScatterGatherElement::new)));
+        poolMap.put(Result.class, new ConcurrentRingBufferPool<>(DEFAULT_POOL_SIZE, Result::new));
+        poolMap.put(AsyncEvent.class, new ConcurrentRingBufferPool<>(DEFAULT_POOL_SIZE, AsyncEvent::new));
+        poolMap.put(SendWorkRequest.class,new ConcurrentRingBufferPool<>(DEFAULT_POOL_SIZE, SendWorkRequest::new));
+        poolMap.put(ReceiveWorkRequest.class, new ConcurrentRingBufferPool<>(DEFAULT_POOL_SIZE, ReceiveWorkRequest::new));
+        poolMap.put(ScatterGatherElement.class, new ConcurrentRingBufferPool<>(DEFAULT_POOL_SIZE, ScatterGatherElement::new));
     }
 
     private Verbs() {
     }
 
     public static Poolable getPoolableInstance(Class<? extends Poolable> clazz) {
-        return poolMap.get(clazz).get().getInstance();
+        return poolMap.get(clazz).getInstance();
     }
 
     public static void returnPoolableInstance(Poolable instance) {
-        poolMap.get(instance.getClass()).get().returnInstance(instance);
+        poolMap.get(instance.getClass()).returnInstance(instance);
     }
 
     // System helper functions

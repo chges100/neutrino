@@ -26,7 +26,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
-    private static final int DEFAULT_BUFFER_SIZE = 64;
+    private static final int DEFAULT_BUFFER_SIZE = 1024;
     private static final int DEFAULT_DEVICE_ID = 0;
     private static final int ITERATIONS = 50;
 
@@ -49,6 +49,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var statistics = new StatisticManager();
         statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_WRITE);
         statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_BYTES_WRITTEN);
+        statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.BYTES_SEND);
 
         manager.registerStatisticManager(statistics);
 
