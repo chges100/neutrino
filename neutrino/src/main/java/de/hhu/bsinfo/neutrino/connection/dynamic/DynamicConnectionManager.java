@@ -236,56 +236,56 @@ public class DynamicConnectionManager {
     }
 
     public void printRCInfos() {
-        String out = "Print out reliable connection information:\n";
+        StringBuilder out = new StringBuilder("Print out reliable connection information:\n");
 
         for(var connection : connections.values()) {
-            out += connection;
-            out += "\n";
-            out += "connected: " + connection.isConnected();
-            out += "\n";
+            out.append(connection);
+            out.append("\n");
+            out.append("connected: ").append(connection.isConnected());
+            out.append("\n");
         }
 
-        LOGGER.info(out);
+        LOGGER.info(out.toString());
 
     }
 
     public void printRemoteBufferInfos() {
         var remoteLocalIds = getRemoteLocalIds();
 
-        String out = "Print out remote buffer information:\n";
+        StringBuilder out = new StringBuilder("Print out remote buffer information:\n");
 
         for(var remoteLocalId : remoteLocalIds) {
             var remoteBufferInfo = remoteBufferHandler.getBufferInfo(remoteLocalId);
 
             if(remoteBufferInfo != null) {
-                out += "Remote " + remoteLocalId + ": ";
-                out += remoteBufferInfo;
-                out += "\n";
+                out.append("Remote ").append(remoteLocalId).append(": ");
+                out.append(remoteBufferInfo);
+                out.append("\n");
             }
 
         }
 
-        LOGGER.info(out);
+        LOGGER.info(out.toString());
 
     }
 
     public void printLocalBufferInfos() {
         var remoteLocalIds = getRemoteLocalIds();
 
-        String out = "Content of local connection RDMA buffers:\n";
+        StringBuilder out = new StringBuilder("Content of local connection RDMA buffers:\n");
 
         for(var remoteLocalId : remoteLocalIds) {
 
             var buffer = localBufferHandler.getBuffer(remoteLocalId);
 
             if(buffer != null) {
-                out += "Buffer for remote with address " + buffer.getHandle() + ": ";
+                out.append("Buffer for remote with address ").append(buffer.getHandle()).append(": ");
                 var tmp = new NativeString(buffer, 0, LOCAL_BUFFER_READ);
-                out += tmp.get() + "\n";
+                out.append(tmp.get()).append("\n");
             }
         }
 
-        LOGGER.info(out);
+        LOGGER.info(out.toString());
     }
 
     public void registerStatisticManager(StatisticManager manager) {

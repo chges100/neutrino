@@ -10,12 +10,16 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class UnreliableDatagram extends QPSocket{
     private static final Logger LOGGER = LoggerFactory.getLogger(UnreliableDatagram.class);
 
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private final int id;
+
+    protected static final AtomicLong sendWrIdProvider = new AtomicLong(0);
+    protected static final AtomicLong receiveWrIdProvider = new AtomicLong(0);
 
     // Offset in Received Buffers (first 40 Bytes are used for MetaInfo)
     public static final int UD_Receive_Offset = 40;

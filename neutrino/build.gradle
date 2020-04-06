@@ -61,6 +61,7 @@ dependencies {
     implementation 'org.jetbrains:annotations:17.0.0'
     implementation 'org.agrona:agrona:1.4.1'
     implementation 'org.threadly:threadly:6.0'
+    implementation 'org.jctools:jctools-core:3.0.0'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.5.1'
     testImplementation 'org.assertj:assertj-core:3.11.1'

@@ -10,14 +10,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.StringJoiner;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.StampedLock;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class ReliableConnection extends QPSocket implements Connectable<Boolean, RCInformation> {
 
@@ -29,9 +27,12 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     private static final long HANDSHAKE_DISCONNECT_TIMEOUT = 200;
     private static final int HANDSHAKE_POLL_QUEUE_TIMEOUT = 40;
 
-    private static final AtomicInteger idCounter = new AtomicInteger(0);
+    private static final AtomicInteger connectionIdCounter = new AtomicInteger(0);
     private final int id;
     private AtomicInteger remoteLid = new AtomicInteger(INVALID_LID);
+
+    protected static final AtomicLong sendWrIdProvider = new AtomicLong(0);
+    protected static final AtomicLong receiveWrIdProvider = new AtomicLong(0);
 
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
     private final AtomicBoolean changeConnection = new AtomicBoolean(false);
@@ -44,7 +45,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         handshakeQueue = new RCHandshakeQueue();
 
-        id = idCounter.getAndIncrement();
+        id = connectionIdCounter.getAndIncrement();
         LOGGER.info("Create reliable connection with id {}", id);
 
         queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
@@ -60,7 +61,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         handshakeQueue = new RCHandshakeQueue();
 
-        id = idCounter.getAndIncrement();
+        id = connectionIdCounter.getAndIncrement();
         LOGGER.info("Create reliable connection with id {}", id);
 
         queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(
@@ -76,7 +77,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         handshakeQueue = new RCHandshakeQueue();
 
-        id = idCounter.getAndIncrement();
+        id = connectionIdCounter.getAndIncrement();
         LOGGER.info("Create reliable connection with id {}", id);
 
         queuePair = deviceContext.getProtectionDomain().createQueuePair(new QueuePair.InitialAttributes.Builder(

@@ -25,9 +25,6 @@ public abstract class QPSocket {
 
     protected QueuePair queuePair;
 
-    protected final AtomicLong sendWrIdProvider;
-    protected final AtomicLong receiveWrIdProvider;
-
     protected QPSocket(DeviceContext deviceContext) throws IOException {
 
         this.deviceContext = deviceContext;
@@ -46,9 +43,6 @@ public abstract class QPSocket {
         if(receiveCompletionQueue == null) {
             throw new IOException("Cannot create completion queue");
         }
-
-        sendWrIdProvider = new AtomicLong(0);
-        receiveWrIdProvider = new AtomicLong(0);
     }
 
     protected QPSocket(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, int sendCompletionQueueSize, int receiveCompletionQueueSize) throws IOException {
@@ -73,9 +67,6 @@ public abstract class QPSocket {
         if(receiveCompletionQueue == null) {
             throw new IOException("Cannot create completion queue");
         }
-
-        sendWrIdProvider = new AtomicLong(0);
-        receiveWrIdProvider = new AtomicLong(0);
     }
 
     protected QPSocket(DeviceContext deviceContext, int sendQueueSize, int receiveQueueSize, CompletionQueue sendCompletionQueue, CompletionQueue receiveCompletionQueue) throws IOException {
@@ -94,9 +85,6 @@ public abstract class QPSocket {
 
         this.sendCompletionQueueSize = sendCompletionQueue.getMaxElements();
         this.receiveCompletionQueueSize = receiveCompletionQueue.getMaxElements();
-
-        sendWrIdProvider = new AtomicLong(0);
-        receiveWrIdProvider = new AtomicLong(0);
     }
 
     abstract void init() throws IOException;

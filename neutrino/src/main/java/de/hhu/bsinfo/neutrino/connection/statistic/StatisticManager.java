@@ -48,17 +48,17 @@ public class StatisticManager {
     }
 
     public void printResults() {
-        final String[] string = {"\n\n*** Print out statistic results: ***\n\n"};
+        final String[] out = {"\n\n*** Print out statistic results: ***\n\n"};
 
         statistics.forEach(statistic -> {
-            string[0] += "Statistic:\t" + statistic.keyType + "\t" + statistic.metric + "\n";
+            out[0] += "Statistic:\t" + statistic.keyType + "\t" + statistic.metric + "\n";
             statistic.statistic.forEach((key, value) -> {
-                string[0] += "\t\t" + key + "\t\t" + value + "\n";
+                out[0] += "\t\t" + key + "\t\t" + value + "\n";
             });
-            string[0] += "\n";
+            out[0] += "\n";
         });
 
-        LOGGER.info(string[0]);
+        LOGGER.info(out[0]);
     }
 
     public class Handler extends Thread {
