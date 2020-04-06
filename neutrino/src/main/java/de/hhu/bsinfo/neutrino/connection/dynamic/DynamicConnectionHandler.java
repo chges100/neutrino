@@ -24,8 +24,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.LockSupport;
 
 public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionHandler.class);
@@ -46,8 +44,11 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     private final AtomicInteger receiveQueueFillCount;
 
-    private final SendWorkRequest sendWorkRequests[];
-    private final ReceiveWorkRequest receiveWorkRequests[];
+    private final SendWorkRequest[] sendWorkRequests;
+    private final ReceiveWorkRequest[] receiveWorkRequests;
+
+    private final AtomicInteger ownSendWrIdProvider;
+    private final AtomicInteger ownReceiveWrIdProvider;
 
 
     private final SGEProvider sendSGEProvider;
@@ -65,6 +66,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         remoteHandlerInfos = new Int2ObjectHashMap<>();
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
+
+        ownSendWrIdProvider = new AtomicInteger(0);
+        ownReceiveWrIdProvider = new AtomicInteger(0);
 
         receiveQueueFillCount = new AtomicInteger(0);
 
@@ -143,7 +147,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         msg.setPayload(payload);
 
 
-        var workRequest = buildSendWorkRequest(sge, remoteInfo, sendWrIdProvider.getAndIncrement() % MAX_SEND_WORK_REQUESTS);
+        var workRequest = buildSendWorkRequest(sge, remoteInfo, ownSendWrIdProvider.getAndIncrement() % MAX_SEND_WORK_REQUESTS);
         sendWorkRequests[(int) workRequest.getId()] = workRequest;
 
         postSend(workRequest);
@@ -156,7 +160,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             return;
         }
 
-        var workRequest = buildReceiveWorkRequest(sge, receiveWrIdProvider.getAndIncrement() % MAX_RECEIVE_WORK_REQUESTS);
+        var workRequest = buildReceiveWorkRequest(sge, ownReceiveWrIdProvider.getAndIncrement() % MAX_RECEIVE_WORK_REQUESTS);
         receiveWorkRequests[(int) workRequest.getId()] = workRequest;
 
         postReceive(workRequest);
@@ -219,6 +223,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
                     var sge = (ScatterGatherElement) NativeObjectRegistry.getObject(sendWorkRequests[(int) completion.getId()].getListHandle());
                     sendSGEProvider.returnSGE(sge);
+
+                    sendWorkRequests[(int) completion.getId()].releaseInstance();
                 }
 
                 workCompletions = pollReceiveCompletions(batchSize);
@@ -239,6 +245,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     executor.submit(new IncomingMessageHandler(message.getMessageType(), message.getPayload()));
 
                     receiveSGEProvider.returnSGE(sge);
+
+                    receiveWorkRequests[(int) completion.getId()].releaseInstance();
                 }
 
                 // Fill up receive queue of dch

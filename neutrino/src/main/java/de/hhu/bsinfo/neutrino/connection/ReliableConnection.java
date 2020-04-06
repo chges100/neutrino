@@ -4,8 +4,12 @@ import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.interfaces.Connectable;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
+import de.hhu.bsinfo.neutrino.connection.util.ConcurrentRingBufferPool;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
+import de.hhu.bsinfo.neutrino.util.Poolable;
 import de.hhu.bsinfo.neutrino.verbs.*;
+import org.agrona.collections.Long2ObjectHashMap;
+import org.jctools.maps.NonBlockingHashMapLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,18 +30,22 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     private static final long HANDSHAKE_CONNECT_TIMEOUT = 2000;
     private static final long HANDSHAKE_DISCONNECT_TIMEOUT = 200;
     private static final int HANDSHAKE_POLL_QUEUE_TIMEOUT = 40;
+    private static final int PRE_COMPLETION_BUFFER_POOL_SIZE = 2048;
 
-    private static final AtomicInteger connectionIdCounter = new AtomicInteger(0);
     private final int id;
     private AtomicInteger remoteLid = new AtomicInteger(INVALID_LID);
-
-    protected static final AtomicLong sendWrIdProvider = new AtomicLong(0);
-    protected static final AtomicLong receiveWrIdProvider = new AtomicLong(0);
 
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
     private final AtomicBoolean changeConnection = new AtomicBoolean(false);
 
     private final RCHandshakeQueue handshakeQueue;
+
+    private static final AtomicInteger connectionIdCounter = new AtomicInteger(0);
+
+    protected static final AtomicLong wrIdProvider = new AtomicLong(0);
+
+    private static final NonBlockingHashMapLong<PreCompletionData> preCompletionDataMap = new NonBlockingHashMapLong<>();
+    private static final ConcurrentRingBufferPool<PreCompletionData> preCompletionDataPool = new ConcurrentRingBufferPool<PreCompletionData>(PRE_COMPLETION_BUFFER_POOL_SIZE, PreCompletionData::new);
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
@@ -152,9 +160,13 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, sendWrIdProvider.getAndIncrement());
+        var wrId = wrIdProvider.getAndIncrement();
 
-        var wrId = postSend(sendWorkRequest);
+        preCompletionDataMap.put(wrId, preCompletionDataPool.getInstance().setSendData(wrId, queuePair.getQueuePairNumber(), id, remoteLid.get(), length));
+
+        var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, wrId);
+
+        postSend(sendWorkRequest);
 
         scatterGatherElement.releaseInstance();
         sendWorkRequest.releaseInstance();
@@ -180,9 +192,17 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var sendWorkRequest = buildRDMAWorkRequest(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey, sendWrIdProvider.getAndIncrement());
+        var wrId = wrIdProvider.getAndIncrement();
 
-        var wrId = postSend(sendWorkRequest);
+        if(opCode == SendWorkRequest.OpCode.RDMA_READ) {
+            preCompletionDataMap.put(wrId, preCompletionDataPool.getInstance().setRDMAReadData(wrId, queuePair.getQueuePairNumber(), id, remoteLid.get(), length));
+        } else if(opCode == SendWorkRequest.OpCode.RDMA_WRITE) {
+            preCompletionDataMap.put(wrId, preCompletionDataPool.getInstance().setRDMAWriteData(wrId, queuePair.getQueuePairNumber(), id, remoteLid.get(), length));
+        }
+
+        var sendWorkRequest = buildRDMAWorkRequest(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey, wrId);
+
+        postSend(sendWorkRequest);
 
         scatterGatherElement.releaseInstance();
         sendWorkRequest.releaseInstance();
@@ -212,7 +232,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, receiveWrIdProvider.getAndIncrement());
+        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, wrIdProvider.getAndIncrement());
 
         var wrId = postReceive(receiveWorkRequest);
 
@@ -400,6 +420,10 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return handshakeQueue;
     }
 
+    public static PreCompletionData fetchPreCompletionData(long wrId) {
+        return preCompletionDataMap.remove(wrId);
+    }
+
 
     public class RCHandshakeQueue  {
         protected static final int SEND_COMPLETE = 0;
@@ -434,5 +458,58 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
             return queue.poll();
         }
 
+    }
+
+    public static class PreCompletionData implements Poolable {
+        public long wrId;
+        public long qpNumber;
+        public long connectionId;
+        public long remoteLocalId;
+        public long bytesSend;
+        public long bytesWrittenRDMA;
+        public long bytesReadRDMA;
+
+        PreCompletionData() {}
+
+        public PreCompletionData setSendData(long wrId, long qpNumber, long connectionId, long remoteLocalId, long bytesSend) {
+            this.wrId = wrId;
+            this.qpNumber = qpNumber;
+            this.connectionId = connectionId;
+            this.remoteLocalId = remoteLocalId;
+            this.bytesSend = bytesSend;
+            this.bytesWrittenRDMA = 0;
+            this.bytesReadRDMA = 0;
+
+            return this;
+        }
+
+        public PreCompletionData setRDMAReadData(long wrId, long qpNumber, long connectionId, long remoteLocalId, long bytesRead) {
+            this.wrId = wrId;
+            this.qpNumber = qpNumber;
+            this.connectionId = connectionId;
+            this.remoteLocalId = remoteLocalId;
+            this.bytesSend = 0;
+            this.bytesWrittenRDMA = 0;
+            this.bytesReadRDMA = bytesRead;
+
+            return this;
+        }
+
+        public PreCompletionData setRDMAWriteData(long wrId, long qpNumber, long connectionId, long remoteLocalId, long bytesWritten) {
+            this.wrId = wrId;
+            this.qpNumber = qpNumber;
+            this.connectionId = connectionId;
+            this.remoteLocalId = remoteLocalId;
+            this.bytesSend = 0;
+            this.bytesWrittenRDMA = bytesWritten;
+            this.bytesReadRDMA = 0;
+
+            return this;
+        }
+
+        @Override
+        public void releaseInstance() {
+            preCompletionDataPool.returnInstance(this);
+        }
     }
 }

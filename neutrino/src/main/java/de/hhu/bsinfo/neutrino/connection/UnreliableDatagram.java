@@ -1,7 +1,6 @@
 package de.hhu.bsinfo.neutrino.connection;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
-import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.slf4j.Logger;
@@ -18,8 +17,7 @@ public class UnreliableDatagram extends QPSocket{
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private final int id;
 
-    protected static final AtomicLong sendWrIdProvider = new AtomicLong(0);
-    protected static final AtomicLong receiveWrIdProvider = new AtomicLong(0);
+    protected static final AtomicLong wrIdProvider = new AtomicLong(0);
 
     // Offset in Received Buffers (first 40 Bytes are used for MetaInfo)
     public static final int UD_Receive_Offset = 40;
@@ -98,16 +96,21 @@ public class UnreliableDatagram extends QPSocket{
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, remoteInfo, sendWrIdProvider.getAndIncrement());
+        var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, remoteInfo, wrIdProvider.getAndIncrement());
 
-        return postSend(sendWorkRequest);
+        var wrId = postSend(sendWorkRequest);
+
+        sendWorkRequest.releaseInstance();
+        scatterGatherElement.releaseInstance();
+
+        return wrId;
     }
 
-    protected SendWorkRequest buildSendWorkRequest(ScatterGatherElement sge, UDInformation remoteInfo, long id) {
+    protected SendWorkRequest buildSendWorkRequest(ScatterGatherElement sge, UDInformation remoteInfo, long wrId) {
         var addressAttributes = new AddressHandle.Attributes.Builder(remoteInfo.getLocalId(), remoteInfo.getPortNumber()).build();
         var addressHandle = getDeviceContext().getProtectionDomain().createAddressHandle(addressAttributes);
 
-        return new SendWorkRequest.UnreliableBuilder(SendWorkRequest.OpCode.SEND, sge, addressHandle, remoteInfo.getQueuePairNumber(), remoteInfo.getQueuePairKey()).withId(id).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).build();
+        return new SendWorkRequest.UnreliableBuilder(SendWorkRequest.OpCode.SEND, sge, addressHandle, remoteInfo.getQueuePairNumber(), remoteInfo.getQueuePairKey()).withId(wrId).withSendFlags(SendWorkRequest.SendFlag.SIGNALED).build();
     }
 
     public long receive(RegisteredBuffer data) {
@@ -120,13 +123,18 @@ public class UnreliableDatagram extends QPSocket{
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, receiveWrIdProvider.getAndIncrement());
+        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, wrIdProvider.getAndIncrement());
 
-        return postReceive(receiveWorkRequest);
+        var wrId = postReceive(receiveWorkRequest);
+
+        receiveWorkRequest.releaseInstance();
+        scatterGatherElement.releaseInstance();
+
+        return wrId;
     }
 
-    protected ReceiveWorkRequest buildReceiveWorkRequest(ScatterGatherElement sge, long id) {
-        return new ReceiveWorkRequest.Builder().withScatterGatherElement(sge).withId(id).build();
+    protected ReceiveWorkRequest buildReceiveWorkRequest(ScatterGatherElement sge, long wrId) {
+        return new ReceiveWorkRequest.Builder().withScatterGatherElement(sge).withId(wrId).build();
     }
 
     protected CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {

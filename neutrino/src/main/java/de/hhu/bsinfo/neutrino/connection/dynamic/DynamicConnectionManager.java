@@ -293,6 +293,7 @@ public class DynamicConnectionManager {
     }
 
     private class RCCompletionQueuePollThread extends Thread {
+
         private boolean isRunning = true;
         private final int batchSize;
         private final CompletionQueue.WorkCompletionArray completionArray;
@@ -312,18 +313,34 @@ public class DynamicConnectionManager {
                     for(int i = 0; i < completionArray.getLength(); i++) {
 
                         var completion = completionArray.get(i);
+
+                        var wrId = completion.getId();
                         var opCode = completion.getOpCode();
                         var qpNumber = completion.getQueuePairNumber();
                         var status = completion.getStatus();
-                        var bytes = completion.getByteCount();
 
+                        long remoteLocalId = 0;
+                        long bytesSend = 0;
+                        long bytesWrittenRDMA = 0;
+                        long bytesReadRDMA = 0;
+
+                        var preCompletionData = ReliableConnection.fetchPreCompletionData(wrId);
                         var connection = qpToConnection.get(qpNumber);
+
+                        if(preCompletionData != null) {
+                            remoteLocalId = preCompletionData.remoteLocalId;
+                            bytesSend = preCompletionData.bytesSend;
+                            bytesReadRDMA = preCompletionData.bytesReadRDMA;
+                            bytesWrittenRDMA = preCompletionData.bytesWrittenRDMA;
+                        } else {
+                            remoteLocalId = connection.getRemoteLocalId();
+                        }
 
 
                         var statRAWData = new RAWData();
 
                         statRAWData.setKeyTypes(Statistic.KeyType.QP_NUM, Statistic.KeyType.CONNECTION_ID, Statistic.KeyType.REMOTE_LID);
-                        statRAWData.setKeyData(completion.getQueuePairNumber(), connection.getId(), connection.getRemoteLocalId());
+                        statRAWData.setKeyData(completion.getQueuePairNumber(), wrId, remoteLocalId);
 
                         if(opCode == WorkCompletion.OpCode.SEND) {
 
@@ -331,7 +348,7 @@ public class DynamicConnectionManager {
                                 connection.getHandshakeQueue().pushSendComplete();
 
                                 statRAWData.setMetrics(Statistic.Metric.SEND, Statistic.Metric.BYTES_SEND, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytes, 1);
+                                statRAWData.setMetricsData(1, bytesSend, 1);
                             } else {
                                 connection.getHandshakeQueue().pushSendError();
 
@@ -342,7 +359,7 @@ public class DynamicConnectionManager {
 
                             if(status == WorkCompletion.Status.SUCCESS) {
                                 statRAWData.setMetrics(Statistic.Metric.RDMA_WRITE, Statistic.Metric.RDMA_BYTES_WRITTEN, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytes, 1);
+                                statRAWData.setMetricsData(1, bytesWrittenRDMA, 1);
 
                             } else {
 
@@ -353,7 +370,7 @@ public class DynamicConnectionManager {
 
                             if (status == WorkCompletion.Status.SUCCESS) {
                                 statRAWData.setMetrics(Statistic.Metric.RDMA_READ, Statistic.Metric.RDMA_BYTES_READ, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytes, 1);
+                                statRAWData.setMetricsData(1, bytesReadRDMA, 1);
 
                             } else {
 
@@ -364,6 +381,11 @@ public class DynamicConnectionManager {
 
                         if(status != WorkCompletion.Status.SUCCESS) {
                             LOGGER.error("Send Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
+                        }
+
+                        if(preCompletionData != null) {
+                            preCompletionData.releaseInstance();
+
                         }
 
                         for(var statisticManager : statisticManagers) {
