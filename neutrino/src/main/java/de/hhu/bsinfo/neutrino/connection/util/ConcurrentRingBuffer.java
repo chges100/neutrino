@@ -1,15 +1,17 @@
 package de.hhu.bsinfo.neutrino.connection.util;
 
 import org.agrona.concurrent.ManyToManyConcurrentArrayQueue;
+import org.jctools.queues.MpmcArrayQueue;
+import org.jctools.queues.MpscArrayQueue;
 
 import java.util.ArrayList;
 
 public class ConcurrentRingBuffer<T> {
 
-    private final ManyToManyConcurrentArrayQueue<T> buffer;
+    private final MpmcArrayQueue<T> buffer;
 
     public ConcurrentRingBuffer(final int size) {
-        buffer = new ManyToManyConcurrentArrayQueue<>(size);
+        buffer = new MpmcArrayQueue<>(size);
     }
 
     public int size() {
@@ -28,7 +30,7 @@ public class ConcurrentRingBuffer<T> {
     }
 
     public boolean isFull() {
-        return buffer.remainingCapacity() == 0;
+        return buffer.capacity() - buffer.size() == 0;
     }
 
     public void push(final T object) {
