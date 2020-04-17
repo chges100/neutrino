@@ -11,7 +11,6 @@ import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.data.NativeString;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.agrona.collections.Int2ObjectHashMap;
-import org.agrona.collections.Long2ObjectHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +43,7 @@ public class DynamicConnectionManager {
 
     protected final CompletionQueue sendCompletionQueue;
     protected final CompletionQueue receiveCompletionQueue;
-    protected final Int2ObjectHashMap<ReliableConnection> connections;
+    protected final Int2ObjectHashMap<ReliableConnection> connectionTable;
     protected final Int2ObjectHashMap<ReliableConnection> qpToConnection;
 
     protected RemoteBufferHandler remoteBufferHandler;
@@ -54,9 +53,9 @@ public class DynamicConnectionManager {
 
     private UDInformationHandler udInformationHandler;
 
-    private final RCCompletionQueuePollThread rcCqpt;
+    private final RCCompletionQueuePollThread rcCompletionPoller;
 
-    private final int UDPPort;
+    private final int portUDP;
 
     private final List<StatisticManager> statisticManagers;
 
@@ -66,7 +65,7 @@ public class DynamicConnectionManager {
 
         deviceContexts = new ArrayList<>();
 
-        connections = new Int2ObjectHashMap<>();
+        connectionTable = new Int2ObjectHashMap<>();
         qpToConnection = new Int2ObjectHashMap<>();
 
         statisticManagers = new ArrayList<>();
@@ -97,10 +96,10 @@ public class DynamicConnectionManager {
             throw new IOException("Cannot create completion queue");
         }
 
-        UDPPort = port;
+        portUDP = port;
 
-        rcCqpt = new RCCompletionQueuePollThread(RC_COMPLETION_QUEUE_POLL_BATCH_SIZE);
-        rcCqpt.start();
+        rcCompletionPoller = new RCCompletionQueuePollThread(RC_COMPLETION_QUEUE_POLL_BATCH_SIZE);
+        rcCompletionPoller.start();
     }
 
     public void init() throws IOException{
@@ -111,7 +110,7 @@ public class DynamicConnectionManager {
         dch = new DynamicConnectionHandler(this, deviceContexts.get(0));
         LOGGER.info("Data of UD: {}", dch);
 
-        udInformationHandler = new UDInformationHandler(this, UDPPort);
+        udInformationHandler = new UDInformationHandler(this, portUDP);
         udInformationHandler.start();
     }
 
@@ -140,12 +139,12 @@ public class DynamicConnectionManager {
         ReliableConnection connection = null;
 
         while (!connected) {
-            if(!connections.containsKey(remoteLocalId)) {
+            if(!connectionTable.containsKey(remoteLocalId)) {
                 createConnection(remoteLocalId);
             }
 
             rwLocks.readLock(remoteLocalId);
-            connection = connections.get(remoteLocalId);
+            connection = connectionTable.get(remoteLocalId);
 
             if(connection != null && connection.isConnected()) {
                 connected = true;
@@ -169,11 +168,11 @@ public class DynamicConnectionManager {
 
         var locked = rwLocks.writeLock(remoteLocalId, CREATE_CONNECTION_TIMEOUT);
 
-        if(locked && !connections.containsKey(remoteLocalId)) {
+        if(locked && !connectionTable.containsKey(remoteLocalId)) {
             try {
                 var connection = new ReliableConnection(deviceContexts.get(0), RC_QUEUE_PAIR_SIZE, RC_QUEUE_PAIR_SIZE, sendCompletionQueue, receiveCompletionQueue);
                 connection.init();
-                connections.put(remoteLocalId, connection);
+                connectionTable.put(remoteLocalId, connection);
                 qpToConnection.put(connection.getQueuePair().getQueuePairNumber(), connection);
 
                 var localQP = new RCInformation(connection);
@@ -198,7 +197,7 @@ public class DynamicConnectionManager {
         udInformationHandler.shutdown();
         LOGGER.debug("UDInformationHandler is shut down");
 
-        rcCqpt.shutdown();
+        rcCompletionPoller.shutdown();
         LOGGER.debug("RCCQPT is shut down");
 
 
@@ -207,7 +206,7 @@ public class DynamicConnectionManager {
 
         LOGGER.debug("Begin disconnecting all existing connections");
 
-        for(var kv : connections.entrySet()) {
+        for(var kv : connectionTable.entrySet()) {
             if(kv.getValue().isConnected()) {
                 var connection = kv.getValue();
 
@@ -215,7 +214,7 @@ public class DynamicConnectionManager {
                     try {
                         connection.disconnect();
                         connection.close();
-                        connections.remove(kv.getKey());
+                        connectionTable.remove(kv.getKey());
                     } catch (IOException e) {
                         LOGGER.debug("Error disconnecting connection {}: {}", connection.getId(), e);
                     }
@@ -238,7 +237,7 @@ public class DynamicConnectionManager {
     public void printRCInfos() {
         StringBuilder out = new StringBuilder("Print out reliable connection information:\n");
 
-        for(var connection : connections.values()) {
+        for(var connection : connectionTable.values()) {
             out.append(connection);
             out.append("\n");
             out.append("connected: ").append(connection.isConnected());

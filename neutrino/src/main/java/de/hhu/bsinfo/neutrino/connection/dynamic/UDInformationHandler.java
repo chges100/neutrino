@@ -93,7 +93,7 @@ public class UDInformationHandler {
     private class UDInformationPropagator extends Thread {
         private final DatagramPacket datagram;
 
-        private final long parkNanos = 1000000000;
+        private final long sleepTime = 1000;
 
         UDInformationPropagator() throws IOException {
             setName("UDInformationPropagator");
@@ -119,7 +119,11 @@ public class UDInformationHandler {
                     LOGGER.error("Could not broadcast UD information");
                 }
 
-                LockSupport.parkNanos(parkNanos);
+                try {
+                    Thread.sleep(sleepTime);
+                } catch (InterruptedException e) {
+                    LOGGER.info("Sleeping interrupted");
+                }
             }
         }
     }

@@ -54,7 +54,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private final SGEProvider sendSGEProvider;
     private final SGEProvider receiveSGEProvider;
 
-    private final UDCompletionQueuePollThread udCqpt;
+    private final UDCompletionQueuePollThread udCompletionPoller;
 
     protected DynamicConnectionHandler(DynamicConnectionManager dcm, DeviceContext deviceContext) throws IOException {
 
@@ -83,8 +83,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         localUDInformation = new UDInformation((byte) 1, getPortAttributes().getLocalId(), getQueuePair().getQueuePairNumber(),
                 getQueuePair().queryAttributes().getQkey());
 
-        udCqpt = new UDCompletionQueuePollThread();
-        udCqpt.start();
+        udCompletionPoller = new UDCompletionQueuePollThread();
+        udCompletionPoller.start();
     }
 
     protected UDInformation getLocalUDInformation() {
@@ -183,12 +183,12 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     @Override
     public void close() {
-        udCqpt.shutdown();
+        udCompletionPoller.shutdown();
 
         boolean killed = false;
 
         while(!killed) {
-            killed = udCqpt.isKilled();
+            killed = udCompletionPoller.isKilled();
         }
 
         queuePair.close();
@@ -311,12 +311,12 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             boolean connected = false;
 
             while (!connected) {
-                if (!dcm.connections.containsKey(remoteLocalId)) {
+                if (!dcm.connectionTable.containsKey(remoteLocalId)) {
                     dcm.createConnection(remoteLocalId);
                 }
 
                 dcm.rwLocks.readLock(remoteLocalId);
-                var connection = dcm.connections.get(remoteLocalId);
+                var connection = dcm.connectionTable.get(remoteLocalId);
 
                 try {
                     connected = connection.connect(remoteInfo);
