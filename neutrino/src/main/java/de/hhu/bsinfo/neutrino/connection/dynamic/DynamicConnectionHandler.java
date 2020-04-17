@@ -7,15 +7,18 @@ import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.LocalMessage;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
+import de.hhu.bsinfo.neutrino.connection.util.ConcurrentRingBufferPool;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.connection.util.SGEProvider;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
 import de.hhu.bsinfo.neutrino.util.NativeObjectRegistry;
+import de.hhu.bsinfo.neutrino.util.Poolable;
 import de.hhu.bsinfo.neutrino.verbs.ReceiveWorkRequest;
 import de.hhu.bsinfo.neutrino.verbs.ScatterGatherElement;
 import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
 import de.hhu.bsinfo.neutrino.verbs.WorkCompletion;
 import org.agrona.collections.Int2ObjectHashMap;
+import org.jctools.maps.NonBlockingHashMapLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +39,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     private static final long BUFFER_ACK_TIMEOUT = 200;
 
+    private static final int RING_BUFF_SIZE = 100;
+
     private final DynamicConnectionManager dcm;
     private final Int2ObjectHashMap<UDInformation> remoteHandlerInfos;
     private final ThreadPoolExecutor executor;
@@ -49,6 +54,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     private final AtomicInteger ownSendWrIdProvider;
     private final AtomicInteger ownReceiveWrIdProvider;
+
+    private final NonBlockingHashMapLong<StatusObject> callbackMap;
+    private final ConcurrentRingBufferPool<StatusObject> statusObjectPool;
 
 
     private final SGEProvider sendSGEProvider;
@@ -71,6 +79,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         ownReceiveWrIdProvider = new AtomicInteger(0);
 
         receiveQueueFillCount = new AtomicInteger(0);
+
+        callbackMap = new NonBlockingHashMapLong<>();
+        statusObjectPool = new ConcurrentRingBufferPool<>(RING_BUFF_SIZE, StatusObject::new);
 
         sendWorkRequests = new SendWorkRequest[MAX_SEND_WORK_REQUESTS];
         receiveWorkRequests = new ReceiveWorkRequest[MAX_RECEIVE_WORK_REQUESTS];
@@ -130,27 +141,31 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         LOGGER.trace("Send disconnect to {}", remoteLocalId);
     }
 
-    protected void sendBufferAck(short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_ACK, remoteLocalId, localId));
-        LOGGER.trace("Send Buffer ack to {}", remoteLocalId);
+    protected void sendBufferAck(short localId, long msgId, short remoteLocalId) {
+        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_ACK, remoteLocalId, msgId, localId));
+        LOGGER.debug("Send Buffer ack to {}", remoteLocalId);
     }
 
-    protected void sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
+    protected long sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
         var sge = sendSGEProvider.getSGE();
         if(sge == null) {
             LOGGER.error("Cannot post another send request");
-            return;
+            return -1;
         }
 
         var msg = new LocalMessage(LocalBuffer.wrap(sge.getAddress(), sge.getLength()));
         msg.setMessageType(msgType);
         msg.setPayload(payload);
+        var msgId = Message.provideGlobalId();
+        msg.setId(msgId);
 
 
         var workRequest = buildSendWorkRequest(sge, remoteInfo, ownSendWrIdProvider.getAndIncrement() % MAX_SEND_WORK_REQUESTS);
         sendWorkRequests[(int) workRequest.getId()] = workRequest;
 
         postSend(workRequest);
+
+        return msgId;
     }
 
     protected void receiveMessage() {
@@ -242,7 +257,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
                     var message = new LocalMessage(LocalBuffer.wrap(sge.getAddress(), sge.getLength()), UnreliableDatagram.UD_Receive_Offset);
 
-                    executor.submit(new IncomingMessageHandler(message.getMessageType(), message.getPayload()));
+                    executor.submit(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
 
                     receiveSGEProvider.returnSGE(sge);
 
@@ -272,11 +287,13 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     private class IncomingMessageHandler implements Runnable {
         private final MessageType msgType;
+        private final long msgId;
         private final long[] payload;
 
-        IncomingMessageHandler(MessageType msgType, long... payload) {
+        IncomingMessageHandler(MessageType msgType, long msgId, long... payload) {
             this.msgType = msgType;
             this.payload = payload;
+            this.msgId = msgId;
         }
 
         @Override
@@ -337,16 +354,28 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             dcm.remoteBufferHandler.registerBufferInfo(remoteLid, bufferInfo);
 
-            sendBufferAck(dcm.getLocalId(), remoteLid);
+            sendBufferAck(dcm.getLocalId(), msgId, remoteLid);
         }
 
         private void handleBufferAck() {
-            var remoteLid = (short) payload[0];
+            var oldMsgId = payload[0];
+            var remoteLid = (short) payload[1];
 
-            dcm.localBufferHandler.setBufferInfoAck(remoteLid);
+            LOGGER.debug("222222222222");
+
+            if(callbackMap.containsKey(oldMsgId)) {
+                var statusObject = callbackMap.get(oldMsgId);
+
+                synchronized (statusObject) {
+
+                    statusObject.setBufferAck();
+                    statusObject.notify();
+                }
+            }
         }
 
         private void handleDisconnect() {
+            LOGGER.info("Got disconnect from {}", payload[0]);
             // todo
         }
     }
@@ -385,21 +414,32 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         private void handleBufferInfo() {
 
-            dcm.localBufferHandler.setBufferInfoSent(remoteLocalId);
-
             boolean bufferAck = false;
 
             while (!bufferAck) {
-                sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
+                var msgId = sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
 
-                var start = System.currentTimeMillis();
 
-                while (System.currentTimeMillis() - start < BUFFER_ACK_TIMEOUT) {
-                    if(dcm.localBufferHandler.getBufferInfoStatus(remoteLocalId) == LocalBufferHandler.ACKNOWLEDGED) {
-                        bufferAck = true;
-                        break;
-                    }
+                var statusObject = statusObjectPool.getInstance();
+                callbackMap.put(msgId, statusObject);
+
+                try {
+                    statusObject.wait(BUFFER_ACK_TIMEOUT);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
+
+                synchronized (statusObject) {
+                    if(statusObject.getStatus() == StatusObject.BUFFER_ACK) {
+                        LOGGER.debug("TADAAAAAAAAA");
+                        bufferAck = true;
+                    }
+
+                    callbackMap.remove(msgId, statusObject);
+                    statusObject.releaseInstance();
+                }
+
+
             }
 
         }
@@ -409,11 +449,49 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleDisconnect() {
-            sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
+
+            var locked = dcm.rwLocks.writeLock(remoteLocalId, 100);
+
+            if(locked) {
+                sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
+
+                dcm.rwLocks.unlockWrite(remoteLocalId);
+
+
+            }
         }
 
         private void handleBufferAck() {
             sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
+        }
+    }
+
+    private class StatusObject implements Poolable {
+        public static final int STATELESS = 0;
+        public static final int BUFFER_ACK = 1;
+
+        private AtomicInteger status = new AtomicInteger(0);
+
+        private void setStatus(int status) {
+            this.status.set(status);
+        }
+
+        public void setStateless() {
+            setStatus(STATELESS);
+        }
+
+        public void setBufferAck() {
+            setStatus(BUFFER_ACK);
+        }
+
+        public int getStatus() {
+            return status.get();
+        }
+
+        @Override
+        public void releaseInstance() {
+            status.set(0);
+            statusObjectPool.returnInstance(this);
         }
     }
 }

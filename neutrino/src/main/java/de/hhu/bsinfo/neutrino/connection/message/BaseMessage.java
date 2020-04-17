@@ -5,13 +5,18 @@ import de.hhu.bsinfo.neutrino.data.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 public class BaseMessage<T extends LocalBuffer> implements NativeObject {
+
+    private static final AtomicLong globalIdProvider = new AtomicLong(0);
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseMessage.class);
     private static final int PAYLOAD_COUNT = 4;
-    private static final int SIZE = Integer.BYTES + PAYLOAD_COUNT * Long.BYTES;
+    private static final int SIZE = Integer.BYTES + Long.BYTES +  PAYLOAD_COUNT * Long.BYTES;
 
     private final NativeInteger messageType;
+    private final NativeLong id;
     private final NativeLong[] payload;
     private final long handle;
 
@@ -19,7 +24,7 @@ public class BaseMessage<T extends LocalBuffer> implements NativeObject {
 
 
 
-    public BaseMessage(T byteBuffer, MessageType messageType, long ... payload) {
+    public BaseMessage(T byteBuffer, MessageType messageType, long id, long ... payload) {
 
         this.byteBuffer = byteBuffer;
 
@@ -29,13 +34,16 @@ public class BaseMessage<T extends LocalBuffer> implements NativeObject {
         this.messageType = new NativeInteger(byteBuffer, 0);
         this.messageType.set(messageType.ordinal());
 
+        this.id = new NativeLong(byteBuffer, Integer.BYTES);
+        this.id.set(id);
+
         var varCount = payload.length;
 
         this.payload = new NativeLong[PAYLOAD_COUNT];
 
 
         for(int i = 0; i < PAYLOAD_COUNT; i++) {
-            this.payload[i] = new NativeLong(byteBuffer, Integer.BYTES + i * Long.BYTES);
+            this.payload[i] = new NativeLong(byteBuffer, Integer.BYTES + Long.BYTES + i * Long.BYTES);
 
             if(i < varCount) {
                 this.payload[i].set(payload[i]);
@@ -53,10 +61,12 @@ public class BaseMessage<T extends LocalBuffer> implements NativeObject {
 
         this.messageType = new NativeInteger(byteBuffer, 0);
 
+        this.id = new NativeLong(byteBuffer, Integer.BYTES);
+
         this.payload = new NativeLong[PAYLOAD_COUNT];
 
         for(int i = 0; i < PAYLOAD_COUNT; i++) {
-            this.payload[i] = new NativeLong(byteBuffer, Integer.BYTES + i * Long.BYTES);
+            this.payload[i] = new NativeLong(byteBuffer, Integer.BYTES + Long.BYTES + i * Long.BYTES);
         }
     }
 
@@ -67,10 +77,12 @@ public class BaseMessage<T extends LocalBuffer> implements NativeObject {
 
         this.messageType = new NativeInteger(byteBuffer, offset);
 
+        this.id = new NativeLong(byteBuffer, offset + Integer.BYTES);
+
         this.payload = new NativeLong[PAYLOAD_COUNT];
 
         for(int i = 0; i < PAYLOAD_COUNT; i++) {
-            this.payload[i] = new NativeLong(byteBuffer, offset + Integer.BYTES + i * Long.BYTES);
+            this.payload[i] = new NativeLong(byteBuffer, offset + Integer.BYTES + Long.BYTES + i * Long.BYTES);
         }
     }
 
@@ -116,6 +128,18 @@ public class BaseMessage<T extends LocalBuffer> implements NativeObject {
         return SIZE;
     }
 
+    public void setId(long id) {
+        this.id.set(id);
+    }
+
+    public long getId() {
+        return id.get();
+    }
+
+    public static long provideGlobalId() {
+        return globalIdProvider.getAndIncrement();
+    }
+
     @Override
     public long getHandle() {
         return handle;
@@ -131,6 +155,8 @@ public class BaseMessage<T extends LocalBuffer> implements NativeObject {
 
         var ret = "Message {\n" +
                 "\tmessageType=" + MessageType.values()[messageType.get()] + "\n";
+
+        ret += "\tId=" + id.get() + "\n";
 
         for(int i = 0; i < PAYLOAD_COUNT; i++) {
             ret += "Payload " + i + ": " + this.payload[i].get() + "\n";

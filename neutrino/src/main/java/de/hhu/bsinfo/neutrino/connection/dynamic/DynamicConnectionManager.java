@@ -18,12 +18,15 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
     protected static final long BUFFER_SIZE = 1024*1024;
     private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 200;
+
+    private static final long RC_TIMEOUT = 2000;
 
     private static final int LOCAL_BUFFER_READ = 16;
     private static final short MAX_LID = Short.MAX_VALUE;
@@ -50,10 +53,12 @@ public class DynamicConnectionManager {
     protected LocalBufferHandler localBufferHandler;
 
     protected final AtomicReadWriteLockArray rwLocks;
+    protected final RCUsageTable rcUsageTable;
 
     private UDInformationHandler udInformationHandler;
 
     private final RCCompletionQueuePollThread rcCompletionPoller;
+    private final RCDisconnectorThread rcDisconnector;
 
     private final int portUDP;
 
@@ -71,6 +76,7 @@ public class DynamicConnectionManager {
         statisticManagers = new ArrayList<>();
 
         rwLocks = new AtomicReadWriteLockArray(MAX_LID);
+        rcUsageTable = new RCUsageTable(MAX_LID);
 
         var deviceCnt = Context.getDeviceCount();
 
@@ -100,6 +106,9 @@ public class DynamicConnectionManager {
 
         rcCompletionPoller = new RCCompletionQueuePollThread(RC_COMPLETION_QUEUE_POLL_BATCH_SIZE);
         rcCompletionPoller.start();
+
+        rcDisconnector = new RCDisconnectorThread();
+        rcDisconnector.start();
     }
 
     public void init() throws IOException{
@@ -156,6 +165,8 @@ public class DynamicConnectionManager {
 
         var remoteBufferInfo = remoteBufferHandler.getBufferInfo(remoteLocalId);
 
+        rcUsageTable.setUsed(remoteLocalId);
+
         LOGGER.trace("Start EXEC on remote {} on connection {}", remoteLocalId, connection.getId());
         connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
         LOGGER.trace("Finished EXEC on remote {} on  connection {}", remoteLocalId, connection.getId());
@@ -177,6 +188,8 @@ public class DynamicConnectionManager {
 
                 var localQP = new RCInformation(connection);
                 dch.sendConnectionRequest(localQP, remoteLocalId);
+
+                rcUsageTable.setUsed(remoteLocalId);
             } catch (IOException e) {
                 LOGGER.error("Could not create connection to {}", remoteLocalId);
             }
@@ -193,6 +206,9 @@ public class DynamicConnectionManager {
 
     public void shutdown() {
         LOGGER.debug("Shutdown dynamic connection manager");
+
+        rcDisconnector.shutdown();
+        LOGGER.debug("RCDisconnector is shut down");
 
         udInformationHandler.shutdown();
         LOGGER.debug("UDInformationHandler is shut down");
@@ -429,6 +445,40 @@ public class DynamicConnectionManager {
             } catch (IllegalStateException e) {
                 LOGGER.error("Illegal state exception {}", e);
                 e.printStackTrace();
+            }
+        }
+
+        public void shutdown() {
+            isRunning = false;
+        }
+    }
+
+    private final class RCDisconnectorThread extends Thread {
+        private boolean isRunning = true;
+
+        public RCDisconnectorThread() {
+
+        }
+
+        @Override
+        public void run() {
+            while (isRunning) {
+
+                int size = rcUsageTable.getSize();
+
+                for(var remoteLid : connectionTable.keySet()) {
+                    var used = rcUsageTable.getStatusAndReset(remoteLid);
+
+                    if(used == 0) {
+                        dch.sendDisconnect(localId,  (short) (int) remoteLid);
+                    }
+                }
+
+                try {
+                    Thread.sleep(RC_TIMEOUT);
+                } catch (InterruptedException e) {
+                    LOGGER.trace("Timeout interrupted");
+                }
             }
         }
 
