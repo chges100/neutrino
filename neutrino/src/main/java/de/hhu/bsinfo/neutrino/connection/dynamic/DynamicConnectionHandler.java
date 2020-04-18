@@ -27,6 +27,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.locks.LockSupport;
 
 public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionHandler.class);
@@ -42,7 +44,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final int RING_BUFF_SIZE = 100;
 
     private final DynamicConnectionManager dcm;
-    private final Int2ObjectHashMap<UDInformation> remoteHandlerInfos;
+    private final Int2ObjectHashMap<UDInformation> remoteHandlerTables;
+    private final RegisteredHandlerTable registeredHandlerTable;
     private final ThreadPoolExecutor executor;
 
     private final UDInformation localUDInformation;
@@ -64,7 +67,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     private final UDCompletionQueuePollThread udCompletionPoller;
 
-    protected DynamicConnectionHandler(DynamicConnectionManager dcm, DeviceContext deviceContext) throws IOException {
+    protected DynamicConnectionHandler(DynamicConnectionManager dcm, DeviceContext deviceContext, int maxLid) throws IOException {
 
         super(deviceContext);
 
@@ -72,7 +75,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         LOGGER.info("Set up dynamic connection handler");
 
-        remoteHandlerInfos = new Int2ObjectHashMap<>();
+        remoteHandlerTables = new Int2ObjectHashMap<>();
+        registeredHandlerTable = new RegisteredHandlerTable(maxLid);
         executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
         ownSendWrIdProvider = new AtomicInteger(0);
@@ -103,20 +107,22 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void registerRemoteConnectionHandler(int remoteLocalId, UDInformation remoteHandlerInfo) {
-        remoteHandlerInfos.put(remoteLocalId, remoteHandlerInfo);
+        remoteHandlerTables.put(remoteLocalId, remoteHandlerInfo);
+
+        registeredHandlerTable.setRegistered(remoteLocalId);
     }
 
     protected UDInformation getRemoteHandlerInfo(int remoteLocalId) {
-        return remoteHandlerInfos.get(remoteLocalId);
+        return remoteHandlerTables.get(remoteLocalId);
     }
 
     protected boolean hasRemoteHandlerInfo(int remoteLocalId) {
-        return remoteHandlerInfos.containsKey(remoteLocalId);
+        return remoteHandlerTables.containsKey(remoteLocalId);
     }
 
     protected short[] getRemoteLocalIds() {
-        var n = remoteHandlerInfos.size();
-        var remotes = remoteHandlerInfos.keySet().toArray();
+        var n = remoteHandlerTables.size();
+        var remotes = remoteHandlerTables.keySet().toArray();
         short[] lids = new short[n];
 
         for(int i = 0; i < lids.length; i++) {
@@ -133,7 +139,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     protected void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
-        LOGGER.trace("Send buffer info to {}", remoteLocalId);
+        LOGGER.debug("Send buffer info to {}", remoteLocalId);
     }
 
     protected void sendDisconnect(short localId, short remoteLocalId) {
@@ -147,6 +153,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected long sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
+        if(msgType == MessageType.BUFFER_ACK) {
+            LOGGER.debug("BUFFER ACK!!! REMOTE {} PAYLOAD {}", remoteInfo.getLocalId(), payload);
+        }
+
         var sge = sendSGEProvider.getSGE();
         if(sge == null) {
             LOGGER.error("Cannot post another send request");
@@ -309,6 +319,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     handleDisconnect();
                     break;
                 case BUFFER_ACK:
+                    LOGGER.debug("RECEIVED BUFFER ACK");
                     handleBufferAck();
                     break;
                 default:
@@ -361,8 +372,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             var oldMsgId = payload[0];
             var remoteLid = (short) payload[1];
 
-            LOGGER.debug("222222222222");
-
             if(callbackMap.containsKey(oldMsgId)) {
                 var statusObject = callbackMap.get(oldMsgId);
 
@@ -370,6 +379,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
                     statusObject.setBufferAck();
                     statusObject.notify();
+
+                    LOGGER.debug("StatusObject notify: {}", statusObject);
                 }
             }
         }
@@ -393,6 +404,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         @Override
         public void run() {
+
+            registeredHandlerTable.poll(remoteLocalId);
+
             switch(msgType) {
                 case BUFFER_INFO:
                     handleBufferInfo();
@@ -417,16 +431,20 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             boolean bufferAck = false;
 
             while (!bufferAck) {
-                var msgId = sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
+                var msgId = sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
 
+                //todo find better arangement of synchrimized blocks (compare incoming msg handler)
 
                 var statusObject = statusObjectPool.getInstance();
                 callbackMap.put(msgId, statusObject);
 
-                try {
-                    statusObject.wait(BUFFER_ACK_TIMEOUT);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                synchronized (statusObject) {
+                    try {
+                        LOGGER.debug("StatusObject wait: {}", statusObject);
+                        statusObject.wait(BUFFER_ACK_TIMEOUT);
+                    } catch (InterruptedException e) {
+                        //Thread.currentThread().interrupt();
+                    }
                 }
 
                 synchronized (statusObject) {
@@ -445,7 +463,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleConnectionRequest() {
-            sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
+            sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
         }
 
         private void handleDisconnect() {
@@ -453,7 +471,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             var locked = dcm.rwLocks.writeLock(remoteLocalId, 100);
 
             if(locked) {
-                sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
+                sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
 
                 dcm.rwLocks.unlockWrite(remoteLocalId);
 
@@ -462,7 +480,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleBufferAck() {
-            sendMessage(msgType, remoteHandlerInfos.get(remoteLocalId), payload);
+            sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
         }
     }
 
@@ -492,6 +510,54 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         public void releaseInstance() {
             status.set(0);
             statusObjectPool.returnInstance(this);
+        }
+    }
+
+    private class RegisteredHandlerTable {
+        private static final long POLL_NANOS = 1000;
+
+        private static final int UNREGISTERED = 0;
+        private static final int REGISTERED = 1;
+
+        private final AtomicIntegerArray table;
+        private final int size;
+
+        public RegisteredHandlerTable(int size) {
+            table = new AtomicIntegerArray(size);
+            this.size = size;
+        }
+
+        public void setRegistered(int i) {
+            table.set(i, REGISTERED);
+        }
+
+        public int getStatus(int i) {
+            return table.get(i);
+        }
+
+        public void poll(int i) {
+            var status = table.get(i);
+
+            while (status != REGISTERED) {
+                status = table.get(i);
+
+                LockSupport.parkNanos(POLL_NANOS);
+            }
+        }
+
+        public boolean poll(int i, long timeoutMs) {
+            var status = table.get(i);
+
+            var timeoutNs = TimeUnit.NANOSECONDS.convert(timeoutMs, TimeUnit.MILLISECONDS);
+            var start = System.nanoTime();
+
+            while (status != REGISTERED && System.nanoTime() - start < timeoutNs) {
+                status = table.get(i);
+
+                LockSupport.parkNanos(POLL_NANOS);
+            }
+
+            return status == REGISTERED;
         }
     }
 }

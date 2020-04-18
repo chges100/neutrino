@@ -1,5 +1,6 @@
 package de.hhu.bsinfo.neutrino.connection.util;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
 public class AtomicReadWriteLockArray {
@@ -35,13 +36,15 @@ public class AtomicReadWriteLockArray {
         } while (!locked);
     }
 
-    public boolean readLock(int i, long timeout) {
+    public boolean readLock(int i, long timeoutMs) {
         boolean locked = false;
 
-        var start = System.currentTimeMillis();
+        var start = System.nanoTime();
+        var timeoutNs = TimeUnit.NANOSECONDS.convert(timeoutMs, TimeUnit.MILLISECONDS);
+
         do {
             locked = tryReadLock(i);
-        } while (!locked && System.currentTimeMillis() - start < timeout);
+        } while (!locked && System.nanoTime() - start < timeoutNs);
 
         return locked;
     }
@@ -66,13 +69,15 @@ public class AtomicReadWriteLockArray {
         } while (!locked);
     }
 
-    public boolean writeLock(int i, long timeout) {
+    public boolean writeLock(int i, long timeoutMs) {
         boolean locked = false;
 
-        var start = System.currentTimeMillis();
+        var start = System.nanoTime();
+        var timeoutNs = TimeUnit.NANOSECONDS.convert(timeoutMs, TimeUnit.MILLISECONDS);
+
         do {
             locked = tryWriteLock(i);
-        } while (!locked && System.currentTimeMillis() - start < timeout);
+        } while (!locked && System.nanoTime() - start < timeoutNs);
 
         return locked;
     }

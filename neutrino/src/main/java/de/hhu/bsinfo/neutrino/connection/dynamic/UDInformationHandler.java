@@ -93,7 +93,7 @@ public class UDInformationHandler {
     private class UDInformationPropagator extends Thread {
         private final DatagramPacket datagram;
 
-        private final long sleepTime = 1000;
+        private final long sleepTime = 500;
 
         UDInformationPropagator() throws IOException {
             setName("UDInformationPropagator");
@@ -122,7 +122,7 @@ public class UDInformationHandler {
                 try {
                     Thread.sleep(sleepTime);
                 } catch (InterruptedException e) {
-                    LOGGER.info("Sleeping interrupted");
+                    Thread.currentThread().interrupt();
                 }
             }
         }

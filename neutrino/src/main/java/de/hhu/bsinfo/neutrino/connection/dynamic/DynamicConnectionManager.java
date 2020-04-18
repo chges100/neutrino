@@ -116,7 +116,7 @@ public class DynamicConnectionManager {
         localBufferHandler= new LocalBufferHandler(this);
 
         LOGGER.trace("Create UD to handle connection requests");
-        dch = new DynamicConnectionHandler(this, deviceContexts.get(0));
+        dch = new DynamicConnectionHandler(this, deviceContexts.get(0), MAX_LID);
         LOGGER.info("Data of UD: {}", dch);
 
         udInformationHandler = new UDInformationHandler(this, portUDP);
