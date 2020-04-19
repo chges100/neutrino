@@ -367,7 +367,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
             throw new IOException("Connection already disconnecting or disconnected");
         }
 
-        LOGGER.debug("Start to disconnect connection {} from {}", id, remoteLid);
+        LOGGER.info("Start to disconnect connection {} from {}", id, remoteLid);
 
         // set remote LID
         remoteLid.getAndSet(INVALID_LID);
@@ -380,7 +380,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         // now connection is ready to be connected
         changeConnection.getAndSet(false);
 
-        LOGGER.info("Disconnected connection {}", id);
+        LOGGER.debug("Disconnected connection {}", id);
     }
 
     @Override

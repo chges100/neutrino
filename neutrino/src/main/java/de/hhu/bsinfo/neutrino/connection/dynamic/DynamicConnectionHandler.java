@@ -39,9 +39,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final int SEND_COMPLETION_QUEUE_SIZE = 1000;
     private static final int RECEIVE_COMPLETION_QUEUE_SIZE = 1000;
 
-    private static final long BUFFER_ACK_TIMEOUT = 200;
+    private static final long RESP_BUFFER_ACK_TIMEOUT_MS = 200;
+    private static final long RESP_DISCONNECT_REQ_TIMEOUT_MS = 200;
 
-    private static final int RING_BUFF_SIZE = 100;
+    private static final int RING_BUFF_POOL_SIZE = 100;
 
     private final DynamicConnectionManager dcm;
     private final Int2ObjectHashMap<UDInformation> remoteHandlerTables;
@@ -85,7 +86,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         receiveQueueFillCount = new AtomicInteger(0);
 
         callbackMap = new NonBlockingHashMapLong<>();
-        statusObjectPool = new ConcurrentRingBufferPool<>(RING_BUFF_SIZE, StatusObject::new);
+        statusObjectPool = new ConcurrentRingBufferPool<>(RING_BUFF_POOL_SIZE, StatusObject::new);
 
         sendWorkRequests = new SendWorkRequest[MAX_SEND_WORK_REQUESTS];
         receiveWorkRequests = new ReceiveWorkRequest[MAX_RECEIVE_WORK_REQUESTS];
@@ -157,17 +158,21 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         LOGGER.trace("Send Buffer ack to {}", remoteLocalId);
     }
 
-    protected long sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
+    protected void sendDisconnectResponse(long msgId, long response, short remoteLocalId) {
+        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_RESP_DISCONNECT_REQ, remoteLocalId, msgId, response));
+        LOGGER.trace("Send disconnect request to {}", remoteLocalId);
+    }
+
+    protected void sendMessage(MessageType msgType, long msgId, UDInformation remoteInfo, long ... payload) {
         var sge = sendSGEProvider.getSGE();
         if(sge == null) {
             LOGGER.error("Cannot post another send request");
-            return -1;
+            return;
         }
 
         var msg = new LocalMessage(LocalBuffer.wrap(sge.getAddress(), sge.getLength()));
         msg.setMessageType(msgType);
         msg.setPayload(payload);
-        var msgId = Message.provideGlobalId();
         msg.setId(msgId);
 
 
@@ -175,6 +180,12 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         sendWorkRequests[(int) workRequest.getId()] = workRequest;
 
         postSend(workRequest);
+    }
+
+    protected long sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
+        var msgId = Message.provideGlobalId();
+
+        sendMessage(msgType, msgId, remoteInfo, payload);
 
         return msgId;
     }
@@ -321,12 +332,14 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 case HANDLER_SEND_DISCONNECT_FORCE:
                     handleDisconnectForce();
                     break;
+                case HANDLER_RESP_DISCONNECT_REQ:
+                    handleDisconnectResponse();
+                    break;
                 case HANDLER_RESP_BUFFER_ACK:
-                    LOGGER.debug("RECEIVED BUFFER ACK");
                     handleBufferAck();
                     break;
                 default:
-                    LOGGER.info("Got message {}", payload);
+                    LOGGER.info("Got message msgtype: {}, payload: {}", msgType, payload);
                     break;
             }
 
@@ -383,8 +396,50 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleDisconnectRequest() {
-            LOGGER.info("Got disconnect request from {}", payload[0]);
-            // todo
+            var remoteLid = (int) payload[0];
+            LOGGER.info("Got disconnect request from {}", remoteLid);
+
+            boolean disconnect = false;
+
+            if(dcm.rcUsageTable.getStatus(remoteLid) == RCUsageTable.RC_UNSUSED) {
+                // try to lock once - if lock is not available, connection is in use an  no disconnecting should occur
+                var locked = dcm.rwLocks.tryWriteLock(remoteLid);
+                var connection = dcm.connectionTable.get(remoteLid);
+
+                if(locked && connection != null && connection.isConnected()) {
+                    sendDisconnectResponse(msgId, StatusObject.DISCONNECT_ACCEPT, (short) remoteLid);
+
+                    try {
+                        disconnect = true;
+                        connection.disconnect();
+
+                        dcm.connectionTable.remove(remoteLid);
+                    } catch (IOException e) {
+                        LOGGER.info("Disconnecting of connection {} failed: {}", connection.getId(), e);
+                    }
+
+                    dcm.rwLocks.unlockWrite(remoteLid);
+                }
+
+                if(!disconnect) {
+                    sendDisconnectResponse(msgId, StatusObject.DISCONNECT_REJECT, (short) remoteLid);
+                }
+            }
+        }
+
+        private void handleDisconnectResponse() {
+            var oldMsgId = payload[0];
+            var response = (int) payload[1];
+
+            if(callbackMap.containsKey(oldMsgId)) {
+                var statusObject = callbackMap.get(oldMsgId);
+
+                if(response == StatusObject.DISCONNECT_ACCEPT) {
+                    statusObject.setDisconnectAcceptAndNotify();
+                } else {
+                    statusObject.setDisconnectRejectAndNotify();
+                }
+            }
         }
 
         private void handleDisconnectForce() {
@@ -424,10 +479,13 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     handleDisconnectForce();
                     break;
                 case HANDLER_RESP_BUFFER_ACK:
-                    handleBufferAck();
+                    handleBufferResponse();
+                    break;
+                case HANDLER_RESP_DISCONNECT_REQ:
+                    handleDisconnectResponse();
                     break;
                 default:
-                    LOGGER.info("Got message {}", payload);
+                    LOGGER.info("Could not send message: msgtype {}, payload {}", msgType, payload);
                     break;
             }
         }
@@ -437,12 +495,14 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             boolean bufferAck = false;
 
             while (!bufferAck) {
-                var msgId = sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+                var msgId = Message.provideGlobalId();
 
                 var statusObject = statusObjectPool.getInstance();
                 callbackMap.put(msgId, statusObject);
 
-                statusObject.waitForResponse(BUFFER_ACK_TIMEOUT);
+                sendMessage(msgType, msgId, remoteHandlerTables.get(remoteLocalId), payload);
+
+                statusObject.waitForResponse(RESP_BUFFER_ACK_TIMEOUT_MS);
 
                 if(statusObject.getStatus() == StatusObject.BUFFER_ACK) {
                     bufferAck = true;
@@ -460,10 +520,31 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         private void handleDisconnectRequest() {
 
-            var locked = dcm.rwLocks.writeLock(remoteLocalId, 100);
+            // try to lock once - if lock is not available, connection is in use an  no disconnecting should occur
+            var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
 
             if(locked) {
-                sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+                var msgId = Message.provideGlobalId();
+
+                var statusObject = statusObjectPool.getInstance();
+                callbackMap.put(msgId, statusObject);
+
+                sendMessage(msgType, msgId, remoteHandlerTables.get(remoteLocalId), payload);
+
+                statusObject.waitForResponse(RESP_DISCONNECT_REQ_TIMEOUT_MS);
+
+                if(statusObject.getStatus() == StatusObject.DISCONNECT_ACCEPT) {
+                    var connection = dcm.connectionTable.get(remoteLocalId);
+
+                    if(connection != null && connection.isConnected()) {
+                        try {
+                            connection.disconnect();
+                            dcm.connectionTable.remove(remoteLocalId);
+                        } catch (IOException e) {
+                            LOGGER.info("Disconnecting of connection {} failed: {}", connection.getId(), e);
+                        }
+                    }
+                }
 
                 dcm.rwLocks.unlockWrite(remoteLocalId);
             }
@@ -473,7 +554,11 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         }
 
-        private void handleBufferAck() {
+        private void handleDisconnectResponse() {
+            sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+        }
+
+        private void handleBufferResponse() {
             sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
         }
     }
@@ -481,6 +566,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private class StatusObject implements Poolable {
         public static final int STATELESS = 0;
         public static final int BUFFER_ACK = 1;
+        public static final int DISCONNECT_ACCEPT = 2;
+        public static final int DISCONNECT_REJECT = 3;
 
         private AtomicInteger status = new AtomicInteger(0);
 
@@ -494,6 +581,18 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         public synchronized void setBufferAckAndNotify() {
             setStatus(BUFFER_ACK);
+
+            notifyAll();
+        }
+
+        public synchronized void setDisconnectAcceptAndNotify() {
+            setStatus(DISCONNECT_ACCEPT);
+
+            notifyAll();
+        }
+
+        public synchronized void setDisconnectRejectAndNotify() {
+            setStatus(DISCONNECT_REJECT);
 
             notifyAll();
         }
