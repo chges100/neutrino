@@ -65,6 +65,12 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         TimeUnit.SECONDS.sleep(8);
 
+        for (short remoteLid : remoteLids) {
+            executor.submit(new WorkloadExecutor(manager, ITERATIONS, remoteLid));
+        }
+
+        TimeUnit.SECONDS.sleep(2);
+
         statistics.shutDown();
 
 
