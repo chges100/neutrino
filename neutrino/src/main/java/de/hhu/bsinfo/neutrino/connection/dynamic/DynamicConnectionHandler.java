@@ -40,7 +40,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final int SEND_COMPLETION_QUEUE_SIZE = 1000;
     private static final int RECEIVE_COMPLETION_QUEUE_SIZE = 1000;
 
-    private static final long RW_LOCK_TIMEOUT_MS = 100;
+    private static final long RESP_CONNECTION_REQ_TIMEOUT_MS = 200;
     private static final long RESP_BUFFER_ACK_TIMEOUT_MS = 200;
     private static final long RESP_DISCONNECT_REQ_TIMEOUT_MS = 200;
     private static final long RESP_DISCONNECT_FORCE_RESP_TIMEOUT_MS = 400;
@@ -159,6 +159,11 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     protected void sendBufferAck(short localId, long msgId, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_RESP_BUFFER_ACK, remoteLocalId, msgId, localId));
         LOGGER.trace("Send Buffer ack to {}", remoteLocalId);
+    }
+
+    protected void sendConnectionResponse(long msgId, short remoteLocalId) {
+        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_RESP_CONNECTION_REQ, remoteLocalId, msgId));
+        LOGGER.trace("Send responst to connection request to {}", remoteLocalId);
     }
 
     protected void sendDisconnectResponse(long msgId, long response, short remoteLocalId) {
@@ -339,6 +344,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 case HANDLER_SEND_DISCONNECT_FORCE:
                     handleDisconnectForce();
                     break;
+                case HANDLER_RESP_CONNECTION_REQ:
+                    handleConnectionResponse();
+                    break;
                 case HANDLER_RESP_DISCONNECT_REQ:
                     handleDisconnectResponse();
                     break;
@@ -356,6 +364,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             var remoteInfo = new RCInformation((byte) payload[0], (short) payload[1], (int) payload[2]);
             var remoteLocalId = remoteInfo.getLocalId();
+
+            sendConnectionResponse(msgId, remoteLocalId);
 
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
@@ -450,6 +460,16 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             }
         }
 
+        private void handleConnectionResponse() {
+            var oldMsgId = payload[0];
+
+            if(callbackMap.containsKey(oldMsgId)) {
+                var statusObject = callbackMap.get(oldMsgId);
+
+                statusObject.setConnectionReqAndNotify();
+            }
+        }
+
         private void handleDisconnectForce() {
             var remoteLid = (short) payload[0];
             LOGGER.info("Got disconnect request from {}", remoteLid);
@@ -505,6 +525,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 case HANDLER_RESP_BUFFER_ACK:
                     handleBufferResponse();
                     break;
+                case HANDLER_RESP_CONNECTION_REQ:
+                    handleConnectionResponse();
+                    break;
                 case HANDLER_RESP_DISCONNECT_REQ:
                     handleDisconnectResponse();
                     break;
@@ -539,7 +562,26 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleConnectionRequest() {
-            sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+            boolean informationAck = false;
+
+            while (!informationAck) {
+                var msgId = Message.provideGlobalId();
+
+                var statusObject = statusObjectPool.getInstance();
+                callbackMap.put(msgId, statusObject);
+
+                sendMessage(msgType, msgId, remoteHandlerTables.get(remoteLocalId), payload);
+
+                statusObject.waitForResponse(RESP_BUFFER_ACK_TIMEOUT_MS);
+
+                if(statusObject.getStatus() == StatusObject.CONNECTION_REQ) {
+                    informationAck = true;
+                }
+
+                callbackMap.remove(msgId, statusObject);
+                statusObject.releaseInstance();
+
+            }
         }
 
         private void handleDisconnectRequest() {
@@ -605,6 +647,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
         }
 
+        private void handleConnectionResponse() {
+            sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+        }
+
         private void handleBufferResponse() {
             sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
         }
@@ -615,6 +661,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         public static final int BUFFER_ACK = 1;
         public static final int DISCONNECT_ACCEPT = 2;
         public static final int DISCONNECT_REJECT = 3;
+        public static final int CONNECTION_REQ = 4;
 
         private AtomicInteger status = new AtomicInteger(0);
 
@@ -640,6 +687,12 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         public synchronized void setDisconnectRejectAndNotify() {
             setStatus(DISCONNECT_REJECT);
+
+            notifyAll();
+        }
+
+        public synchronized void setConnectionReqAndNotify() {
+            setStatus(CONNECTION_REQ);
 
             notifyAll();
         }

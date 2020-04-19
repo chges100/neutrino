@@ -10,6 +10,7 @@ public enum MessageType {
     HANDLER_SEND_BUFFER_INFO,
     HANDLER_RESP_BUFFER_ACK,
     HANDLER_RESP_DISCONNECT_REQ,
+    HANDLER_RESP_CONNECTION_REQ,
     // Message Types used by ReliableConnection
     RC_CONNECT,
     RC_DISCONNECT
