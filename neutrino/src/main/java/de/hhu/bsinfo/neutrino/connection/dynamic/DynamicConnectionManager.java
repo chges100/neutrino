@@ -170,7 +170,7 @@ public class DynamicConnectionManager {
                 qpToConnection.put(connection.getQueuePair().getQueuePairNumber(), connection);
 
                 var localQP = new RCInformation(connection);
-                dch.sendConnectionRequest(localQP, remoteLocalId);
+                dch.initConnectionRequest(localQP, remoteLocalId);
 
                 rcUsageTable.setUsed(remoteLocalId);
             } catch (IOException e) {
@@ -208,7 +208,7 @@ public class DynamicConnectionManager {
                 var remoteLid = kv.getValue().getRemoteLocalId();
 
                 if(remoteLid != INVALID_LID) {
-                    dch.sendDisconnectForce(localId, remoteLid);
+                    dch.initDisconnectForce(localId, remoteLid);
                 }
             }
         }
@@ -375,7 +375,7 @@ public class DynamicConnectionManager {
                             connection.reset();
                             connection.init();
 
-                            dch.sendConnectionRequest(new RCInformation(connection), remoteLocalId);
+                            dch.initConnectionRequest(new RCInformation(connection), remoteLocalId);
                         } catch (Exception e) {
                             LOGGER.error("Something went wrong recovering RC after error: {}", e.toString());
                         }
@@ -428,7 +428,7 @@ public class DynamicConnectionManager {
                             connection.reset();
                             connection.init();
 
-                            dch.sendConnectionRequest(new RCInformation(connection), remoteLocalId);
+                            dch.initConnectionRequest(new RCInformation(connection), remoteLocalId);
                         } catch (Exception e) {
                             LOGGER.error("Something went wrong recovering RC after error: {}", e.toString());
                         }
@@ -462,7 +462,7 @@ public class DynamicConnectionManager {
                     var used = rcUsageTable.getStatusAndReset(remoteLid);
 
                     if(used == 0) {
-                        dch.sendDisconnectRequest(localId,  (short) (int) remoteLid);
+                        dch.initDisconnectRequest(localId,  (short) (int) remoteLid);
                     }
                 }
 

@@ -136,7 +136,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         return lids;
     }
 
-    protected void sendConnectionRequest(RCInformation localQP, short remoteLocalId) {
+    protected void initConnectionRequest(RCInformation localQP, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_REQ_CONNECTION, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
         LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
     }
@@ -146,12 +146,12 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         LOGGER.trace("Send buffer info to {}", remoteLocalId);
     }
 
-    protected void sendDisconnectRequest(short localId, short remoteLocalId) {
+    protected void initDisconnectRequest(short localId, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_REQ_DISCONNECT, remoteLocalId, localId));
         LOGGER.trace("Send disconnect request to {}", remoteLocalId);
     }
 
-    protected void sendDisconnectForce(short localId, short remoteLocalId) {
+    protected void initDisconnectForce(short localId, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_SEND_DISCONNECT_FORCE, remoteLocalId, localId));
         LOGGER.trace("Send disconnect force to {}", remoteLocalId);
     }
