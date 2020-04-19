@@ -133,27 +133,27 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void sendConnectionRequest(RCInformation localQP, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.CONNECTION_REQUEST, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
+        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_REQ_CONNECTION, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
         LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
     }
 
     protected void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
+        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_SEND_BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
         LOGGER.debug("Send buffer info to {}", remoteLocalId);
     }
 
     protected void sendDisconnect(short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.DISCONNECT, remoteLocalId, localId));
+        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_REQ_DISCONNECT, remoteLocalId, localId));
         LOGGER.trace("Send disconnect to {}", remoteLocalId);
     }
 
     protected void sendBufferAck(short localId, long msgId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.BUFFER_ACK, remoteLocalId, msgId, localId));
+        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_RESP_BUFFER_ACK, remoteLocalId, msgId, localId));
         LOGGER.debug("Send Buffer ack to {}", remoteLocalId);
     }
 
     protected long sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
-        if(msgType == MessageType.BUFFER_ACK) {
+        if(msgType == MessageType.HANDLER_RESP_BUFFER_ACK) {
             LOGGER.debug("BUFFER ACK!!! REMOTE {} PAYLOAD {}", remoteInfo.getLocalId(), payload);
         }
 
@@ -309,16 +309,16 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         @Override
         public void run() {
             switch(msgType) {
-                case CONNECTION_REQUEST:
+                case HANDLER_REQ_CONNECTION:
                     handleConnectionRequest();
                     break;
-                case BUFFER_INFO:
+                case HANDLER_SEND_BUFFER_INFO:
                     handleBufferInfo();
                     break;
-                case DISCONNECT:
+                case HANDLER_REQ_DISCONNECT:
                     handleDisconnect();
                     break;
-                case BUFFER_ACK:
+                case HANDLER_RESP_BUFFER_ACK:
                     LOGGER.debug("RECEIVED BUFFER ACK");
                     handleBufferAck();
                     break;
@@ -375,13 +375,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             if(callbackMap.containsKey(oldMsgId)) {
                 var statusObject = callbackMap.get(oldMsgId);
 
-                synchronized (statusObject) {
-
-                    statusObject.setBufferAck();
-                    statusObject.notify();
-
-                    LOGGER.debug("StatusObject notify: {}", statusObject);
-                }
+                statusObject.setBufferAckAndNotify();
             }
         }
 
@@ -408,16 +402,16 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             registeredHandlerTable.poll(remoteLocalId);
 
             switch(msgType) {
-                case BUFFER_INFO:
+                case HANDLER_SEND_BUFFER_INFO:
                     handleBufferInfo();
                     break;
-                case CONNECTION_REQUEST:
+                case HANDLER_REQ_CONNECTION:
                     handleConnectionRequest();
                     break;
-                case DISCONNECT:
+                case HANDLER_REQ_DISCONNECT:
                     handleDisconnect();
                     break;
-                case BUFFER_ACK:
+                case HANDLER_RESP_BUFFER_ACK:
                     handleBufferAck();
                     break;
                 default:
@@ -433,31 +427,17 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             while (!bufferAck) {
                 var msgId = sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
 
-                //todo find better arangement of synchrimized blocks (compare incoming msg handler)
-
                 var statusObject = statusObjectPool.getInstance();
                 callbackMap.put(msgId, statusObject);
 
-                synchronized (statusObject) {
-                    try {
-                        LOGGER.debug("StatusObject wait: {}", statusObject);
-                        statusObject.wait(BUFFER_ACK_TIMEOUT);
-                    } catch (InterruptedException e) {
-                        //Thread.currentThread().interrupt();
-                    }
+                statusObject.waitForResponse(BUFFER_ACK_TIMEOUT);
+
+                if(statusObject.getStatus() == StatusObject.BUFFER_ACK) {
+                    bufferAck = true;
                 }
 
-                synchronized (statusObject) {
-                    if(statusObject.getStatus() == StatusObject.BUFFER_ACK) {
-                        LOGGER.debug("TADAAAAAAAAA");
-                        bufferAck = true;
-                    }
-
-                    callbackMap.remove(msgId, statusObject);
-                    statusObject.releaseInstance();
-                }
-
-
+                callbackMap.remove(msgId, statusObject);
+                statusObject.releaseInstance();
             }
 
         }
@@ -498,16 +478,26 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             setStatus(STATELESS);
         }
 
-        public void setBufferAck() {
+        public synchronized void setBufferAckAndNotify() {
             setStatus(BUFFER_ACK);
+
+            notifyAll();
         }
 
         public int getStatus() {
             return status.get();
         }
 
+        public synchronized void waitForResponse(long timeout) {
+            try {
+                wait(timeout);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
         @Override
-        public void releaseInstance() {
+        public synchronized void releaseInstance() {
             status.set(0);
             statusObjectPool.returnInstance(this);
         }
