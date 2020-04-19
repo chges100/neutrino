@@ -1,5 +1,6 @@
 package de.hhu.bsinfo.neutrino.connection.dynamic;
 
+import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
@@ -122,27 +123,15 @@ public class DynamicConnectionManager {
         udInformationHandler.start();
     }
 
-    public void remoteWriteToAll(RegisteredBuffer data, long offset, long length) throws IOException {
-        for(var remoteLocalId : dch.getRemoteLocalIds()){
-            remoteWrite(data, offset, length, remoteLocalId);
-        }
+    public void remoteWrite(RegisteredBuffer data, long offset, long length, BufferInformation remoteBuffer, short remoteLocalId) throws IOException {
+        remoteExecute(SendWorkRequest.OpCode.RDMA_WRITE, data, offset, length, remoteBuffer, remoteLocalId);
     }
 
-    public void remoteReadFromAll(RegisteredBuffer data, long offset, long length) throws IOException {
-        for(var remoteLocalId : dch.getRemoteLocalIds()){
-            remoteRead(data, offset, length, remoteLocalId);
-        }
+    public void remoteRead(RegisteredBuffer data, long offset, long length, BufferInformation remoteBuffer, short remoteLocalId) throws IOException {
+        remoteExecute(SendWorkRequest.OpCode.RDMA_READ, data, offset, length, remoteBuffer, remoteLocalId);
     }
 
-    public void remoteWrite(RegisteredBuffer data, long offset, long length, short remoteLocalId) throws IOException {
-        remoteExecute(SendWorkRequest.OpCode.RDMA_WRITE, data, offset, length, remoteLocalId);
-    }
-
-    public void remoteRead(RegisteredBuffer data, long offset, long length, short remoteLocalId) throws IOException {
-        remoteExecute(SendWorkRequest.OpCode.RDMA_READ, data, offset, length, remoteLocalId);
-    }
-
-    private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, short remoteLocalId) throws IOException {
+    private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, BufferInformation remoteBuffer, short remoteLocalId) throws IOException {
         boolean connected = false;
         ReliableConnection connection = null;
 
@@ -161,11 +150,9 @@ public class DynamicConnectionManager {
             }
         }
 
-        var remoteBufferInfo = remoteBufferHandler.getBufferInfo(remoteLocalId);
-
         rcUsageTable.setUsed(remoteLocalId);
 
-        connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
+        connection.execute(data, opCode, offset, length, remoteBuffer.getAddress(), remoteBuffer.getRemoteKey(), 0);
 
         rwLocks.unlockRead(remoteLocalId);
 
@@ -198,6 +185,10 @@ public class DynamicConnectionManager {
 
     public RegisteredBuffer allocRegisteredBuffer(int deviceId, long size) {
         return deviceContexts.get(deviceId).allocRegisteredBuffer(size);
+    }
+
+    public BufferInformation getRemoteBuffer(short remoteLocalId) {
+        return remoteBufferHandler.getBufferInfo(remoteLocalId);
     }
 
     public void shutdown() {
