@@ -314,6 +314,7 @@ public class DynamicConnectionManager {
         public void run() {
             try {
                 while(isRunning) {
+
                     sendCompletionQueue.poll(completionArray);
 
                     for(int i = 0; i < completionArray.getLength(); i++) {
@@ -325,23 +326,15 @@ public class DynamicConnectionManager {
                         var qpNumber = completion.getQueuePairNumber();
                         var status = completion.getStatus();
 
-                        long remoteLocalId = 0;
-                        long bytesSend = 0;
-                        long bytesWrittenRDMA = 0;
-                        long bytesReadRDMA = 0;
-
-                        var preCompletionData = ReliableConnection.fetchPreCompletionData(wrId);
+                        var workRequestMapElement = ReliableConnection.fetchWorkRequestDataData(wrId);
                         var connection = qpToConnection.get(qpNumber);
 
-                        if(preCompletionData != null) {
-                            remoteLocalId = preCompletionData.remoteLocalId;
-                            bytesSend = preCompletionData.bytesSend;
-                            bytesReadRDMA = preCompletionData.bytesReadRDMA;
-                            bytesWrittenRDMA = preCompletionData.bytesWrittenRDMA;
-                        } else {
-                            remoteLocalId = connection.getRemoteLocalId();
-                        }
+                        var remoteLocalId = workRequestMapElement.remoteLocalId;
+                        var bytes = workRequestMapElement.scatterGatherElement.getLength();
 
+                        workRequestMapElement.sendWorkRequest.releaseInstance();
+                        workRequestMapElement.scatterGatherElement.releaseInstance();
+                        workRequestMapElement.releaseInstance();
 
                         var statRAWData = new RAWData();
 
@@ -354,7 +347,7 @@ public class DynamicConnectionManager {
                                 connection.getHandshakeQueue().pushSendComplete();
 
                                 statRAWData.setMetrics(Statistic.Metric.SEND, Statistic.Metric.BYTES_SEND, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytesSend, 1);
+                                statRAWData.setMetricsData(1, bytes, 1);
                             } else {
                                 connection.getHandshakeQueue().pushSendError();
 
@@ -365,7 +358,7 @@ public class DynamicConnectionManager {
 
                             if(status == WorkCompletion.Status.SUCCESS) {
                                 statRAWData.setMetrics(Statistic.Metric.RDMA_WRITE, Statistic.Metric.RDMA_BYTES_WRITTEN, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytesWrittenRDMA, 1);
+                                statRAWData.setMetricsData(1, bytes, 1);
 
                             } else {
 
@@ -376,7 +369,7 @@ public class DynamicConnectionManager {
 
                             if (status == WorkCompletion.Status.SUCCESS) {
                                 statRAWData.setMetrics(Statistic.Metric.RDMA_READ, Statistic.Metric.RDMA_BYTES_READ, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytesReadRDMA, 1);
+                                statRAWData.setMetricsData(1, bytes, 1);
 
                             } else {
 
@@ -389,11 +382,6 @@ public class DynamicConnectionManager {
                             LOGGER.error("Send Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
                         }
 
-                        if(preCompletionData != null) {
-                            preCompletionData.releaseInstance();
-
-                        }
-
                         for(var statisticManager : statisticManagers) {
                             statisticManager.pushRAWData(statRAWData);
                         }
@@ -404,11 +392,21 @@ public class DynamicConnectionManager {
                     for(int i = 0; i < completionArray.getLength(); i++) {
 
                         var completion = completionArray.get(i);
+
+                        var wrId = completion.getId();
                         var status = completion.getStatus();
                         var qpNumber = completion.getQueuePairNumber();
-                        var bytes = completion.getByteCount();
 
+                        var workRequestMapElement = ReliableConnection.fetchWorkRequestDataData(wrId);
                         var connection = qpToConnection.get(qpNumber);
+
+
+                        var remoteLocalId = workRequestMapElement.remoteLocalId;
+                        var bytes = workRequestMapElement.scatterGatherElement.getLength();
+
+                        workRequestMapElement.receiveWorkRequest.releaseInstance();
+                        workRequestMapElement.scatterGatherElement.releaseInstance();
+                        workRequestMapElement.releaseInstance();
 
                         var statRAWData = new RAWData();
 

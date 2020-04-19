@@ -8,7 +8,6 @@ import de.hhu.bsinfo.neutrino.connection.util.ConcurrentRingBufferPool;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.util.Poolable;
 import de.hhu.bsinfo.neutrino.verbs.*;
-import org.agrona.collections.Long2ObjectHashMap;
 import org.jctools.maps.NonBlockingHashMapLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,8 +43,8 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
     protected static final AtomicLong wrIdProvider = new AtomicLong(0);
 
-    private static final NonBlockingHashMapLong<PreCompletionData> preCompletionDataMap = new NonBlockingHashMapLong<>();
-    private static final ConcurrentRingBufferPool<PreCompletionData> preCompletionDataPool = new ConcurrentRingBufferPool<PreCompletionData>(PRE_COMPLETION_BUFFER_POOL_SIZE, PreCompletionData::new);
+    private static final NonBlockingHashMapLong<WorkRequestMapElement> workRequestMap = new NonBlockingHashMapLong<>();
+    private static final ConcurrentRingBufferPool<WorkRequestMapElement> workRequestMapElementPool = new ConcurrentRingBufferPool<WorkRequestMapElement>(PRE_COMPLETION_BUFFER_POOL_SIZE, WorkRequestMapElement::new);
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
@@ -163,15 +162,11 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
         var wrId = wrIdProvider.getAndIncrement();
-
-        preCompletionDataMap.put(wrId, preCompletionDataPool.getInstance().setSendData(wrId, queuePair.getQueuePairNumber(), id, remoteLid.get(), length));
-
         var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, wrId);
 
-        postSend(sendWorkRequest);
+        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setSendWorkRequest(sendWorkRequest).setScatterGatherElement(scatterGatherElement));
 
-        scatterGatherElement.releaseInstance();
-        sendWorkRequest.releaseInstance();
+        postSend(sendWorkRequest);
 
         return wrId;
     }
@@ -195,19 +190,11 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
         var wrId = wrIdProvider.getAndIncrement();
-
-        if(opCode == SendWorkRequest.OpCode.RDMA_READ) {
-            preCompletionDataMap.put(wrId, preCompletionDataPool.getInstance().setRDMAReadData(wrId, queuePair.getQueuePairNumber(), id, remoteLid.get(), length));
-        } else if(opCode == SendWorkRequest.OpCode.RDMA_WRITE) {
-            preCompletionDataMap.put(wrId, preCompletionDataPool.getInstance().setRDMAWriteData(wrId, queuePair.getQueuePairNumber(), id, remoteLid.get(), length));
-        }
-
         var sendWorkRequest = buildRDMAWorkRequest(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey, wrId);
 
-        postSend(sendWorkRequest);
+        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setSendWorkRequest(sendWorkRequest).setScatterGatherElement(scatterGatherElement));
 
-        scatterGatherElement.releaseInstance();
-        sendWorkRequest.releaseInstance();
+        postSend(sendWorkRequest);
 
         return wrId;
     }
@@ -234,12 +221,12 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, wrIdProvider.getAndIncrement());
+        var wrId = wrIdProvider.getAndIncrement();
+        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, wrId);
 
-        var wrId = postReceive(receiveWorkRequest);
+        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setReceiveWorkRequest(receiveWorkRequest).setScatterGatherElement(scatterGatherElement));
 
-        scatterGatherElement.releaseInstance();
-        receiveWorkRequest.releaseInstance();
+        postReceive(receiveWorkRequest);
 
         return wrId;
     }
@@ -422,8 +409,8 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return handshakeQueue;
     }
 
-    public static PreCompletionData fetchPreCompletionData(long wrId) {
-        return preCompletionDataMap.remove(wrId);
+    public static WorkRequestMapElement fetchWorkRequestDataData(long wrId) {
+        return workRequestMap.remove(wrId);
     }
 
 
@@ -462,56 +449,41 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
     }
 
-    public static class PreCompletionData implements Poolable {
-        public long wrId;
-        public long qpNumber;
-        public long connectionId;
-        public long remoteLocalId;
-        public long bytesSend;
-        public long bytesWrittenRDMA;
-        public long bytesReadRDMA;
+    public static class WorkRequestMapElement implements Poolable {
+        public SendWorkRequest sendWorkRequest;
+        public ReceiveWorkRequest receiveWorkRequest;
+        public ScatterGatherElement scatterGatherElement;
+        public short remoteLocalId;
 
-        PreCompletionData() {}
+        WorkRequestMapElement() {}
 
-        public PreCompletionData setSendData(long wrId, long qpNumber, long connectionId, long remoteLocalId, long bytesSend) {
-            this.wrId = wrId;
-            this.qpNumber = qpNumber;
-            this.connectionId = connectionId;
-            this.remoteLocalId = remoteLocalId;
-            this.bytesSend = bytesSend;
-            this.bytesWrittenRDMA = 0;
-            this.bytesReadRDMA = 0;
+        public WorkRequestMapElement setReceiveWorkRequest(ReceiveWorkRequest receiveWorkRequest) {
+            this.receiveWorkRequest = receiveWorkRequest;
 
             return this;
         }
 
-        public PreCompletionData setRDMAReadData(long wrId, long qpNumber, long connectionId, long remoteLocalId, long bytesRead) {
-            this.wrId = wrId;
-            this.qpNumber = qpNumber;
-            this.connectionId = connectionId;
-            this.remoteLocalId = remoteLocalId;
-            this.bytesSend = 0;
-            this.bytesWrittenRDMA = 0;
-            this.bytesReadRDMA = bytesRead;
+        public WorkRequestMapElement setSendWorkRequest(SendWorkRequest sendWorkRequest) {
+            this.sendWorkRequest = sendWorkRequest;
 
             return this;
         }
 
-        public PreCompletionData setRDMAWriteData(long wrId, long qpNumber, long connectionId, long remoteLocalId, long bytesWritten) {
-            this.wrId = wrId;
-            this.qpNumber = qpNumber;
-            this.connectionId = connectionId;
+        public WorkRequestMapElement setRemoteLocalId(short remoteLocalId) {
             this.remoteLocalId = remoteLocalId;
-            this.bytesSend = 0;
-            this.bytesWrittenRDMA = bytesWritten;
-            this.bytesReadRDMA = 0;
+
+            return this;
+        }
+
+        public WorkRequestMapElement setScatterGatherElement(ScatterGatherElement scatterGatherElement) {
+            this.scatterGatherElement = scatterGatherElement;
 
             return this;
         }
 
         @Override
         public void releaseInstance() {
-            preCompletionDataPool.returnInstance(this);
+            workRequestMapElementPool.returnInstance(this);
         }
     }
 }
