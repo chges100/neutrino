@@ -12,6 +12,7 @@ import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.data.NativeString;
 import de.hhu.bsinfo.neutrino.verbs.*;
 import org.agrona.collections.Int2ObjectHashMap;
+import org.jctools.maps.NonBlockingHashMapLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,8 +47,9 @@ public class DynamicConnectionManager {
 
     protected final CompletionQueue sendCompletionQueue;
     protected final CompletionQueue receiveCompletionQueue;
-    protected final Int2ObjectHashMap<ReliableConnection> connectionTable;
-    protected final Int2ObjectHashMap<ReliableConnection> qpToConnection;
+
+    protected final NonBlockingHashMapLong<ReliableConnection> connectionTable;
+    protected final NonBlockingHashMapLong<ReliableConnection> qpToConnection;
 
     protected RemoteBufferHandler remoteBufferHandler;
     protected LocalBufferHandler localBufferHandler;
@@ -70,8 +72,8 @@ public class DynamicConnectionManager {
 
         deviceContexts = new ArrayList<>();
 
-        connectionTable = new Int2ObjectHashMap<>();
-        qpToConnection = new Int2ObjectHashMap<>();
+        connectionTable = new NonBlockingHashMapLong<>();
+        qpToConnection = new NonBlockingHashMapLong<>();
 
         statisticManagers = new ArrayList<>();
 
@@ -459,10 +461,10 @@ public class DynamicConnectionManager {
             while (isRunning) {
 
                 for(var remoteLid : connectionTable.keySet()) {
-                    var used = rcUsageTable.getStatusAndReset(remoteLid);
+                    var used = rcUsageTable.getStatusAndReset((int) (long) remoteLid);
 
                     if(used == 0) {
-                        dch.initDisconnectRequest(localId,  (short) (int) remoteLid);
+                        dch.initDisconnectRequest(localId,  (short) (long) remoteLid);
                     }
                 }
 
