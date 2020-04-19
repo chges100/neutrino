@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -280,7 +281,11 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
                     var message = new LocalMessage(LocalBuffer.wrap(sge.getAddress(), sge.getLength()), UnreliableDatagram.UD_Receive_Offset);
 
-                    executor.submit(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
+                    try {
+                        executor.submit(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
+                    } catch (RejectedExecutionException e) {
+                        LOGGER.error("Submitting task failed with exception: {}", e);
+                    }
 
                     receiveSGEProvider.returnSGE(sge);
 

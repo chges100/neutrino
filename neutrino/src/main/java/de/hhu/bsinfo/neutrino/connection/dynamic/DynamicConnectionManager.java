@@ -312,129 +312,143 @@ public class DynamicConnectionManager {
 
         @Override
         public void run() {
-            try {
-                while(isRunning) {
+            while(isRunning) {
 
-                    sendCompletionQueue.poll(completionArray);
+                sendCompletionQueue.poll(completionArray);
 
-                    for(int i = 0; i < completionArray.getLength(); i++) {
+                for(int i = 0; i < completionArray.getLength(); i++) {
 
-                        var completion = completionArray.get(i);
+                    var completion = completionArray.get(i);
 
-                        var wrId = completion.getId();
-                        var opCode = completion.getOpCode();
-                        var qpNumber = completion.getQueuePairNumber();
-                        var status = completion.getStatus();
+                    var wrId = completion.getId();
+                    var opCode = completion.getOpCode();
+                    var qpNumber = completion.getQueuePairNumber();
+                    var status = completion.getStatus();
 
-                        var workRequestMapElement = ReliableConnection.fetchWorkRequestDataData(wrId);
-                        var connection = qpToConnection.get(qpNumber);
+                    var workRequestMapElement = ReliableConnection.fetchWorkRequestDataData(wrId);
+                    var connection = qpToConnection.get(qpNumber);
 
-                        var remoteLocalId = workRequestMapElement.remoteLocalId;
-                        var bytes = workRequestMapElement.scatterGatherElement.getLength();
+                    var remoteLocalId = workRequestMapElement.remoteLocalId;
+                    var bytes = workRequestMapElement.scatterGatherElement.getLength();
 
-                        workRequestMapElement.sendWorkRequest.releaseInstance();
-                        workRequestMapElement.scatterGatherElement.releaseInstance();
-                        workRequestMapElement.releaseInstance();
+                    workRequestMapElement.sendWorkRequest.releaseInstance();
+                    workRequestMapElement.scatterGatherElement.releaseInstance();
+                    workRequestMapElement.releaseInstance();
 
-                        var statRAWData = new RAWData();
+                    var statRAWData = new RAWData();
 
-                        statRAWData.setKeyTypes(Statistic.KeyType.QP_NUM, Statistic.KeyType.CONNECTION_ID, Statistic.KeyType.REMOTE_LID);
-                        statRAWData.setKeyData(completion.getQueuePairNumber(), wrId, remoteLocalId);
+                    statRAWData.setKeyTypes(Statistic.KeyType.QP_NUM, Statistic.KeyType.CONNECTION_ID, Statistic.KeyType.REMOTE_LID);
+                    statRAWData.setKeyData(completion.getQueuePairNumber(), wrId, remoteLocalId);
 
-                        if(opCode == WorkCompletion.OpCode.SEND) {
+                    if(opCode == WorkCompletion.OpCode.SEND) {
 
-                            if(status == WorkCompletion.Status.SUCCESS) {
-                                connection.getHandshakeQueue().pushSendComplete();
+                        if(status == WorkCompletion.Status.SUCCESS) {
+                            connection.getHandshakeQueue().pushSendComplete();
 
-                                statRAWData.setMetrics(Statistic.Metric.SEND, Statistic.Metric.BYTES_SEND, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytes, 1);
-                            } else {
-                                connection.getHandshakeQueue().pushSendError();
+                            statRAWData.setMetrics(Statistic.Metric.SEND, Statistic.Metric.BYTES_SEND, Statistic.Metric.SEND_QUEUE_SUCCESS);
+                            statRAWData.setMetricsData(1, bytes, 1);
+                        } else {
+                            connection.getHandshakeQueue().pushSendError();
 
-                                statRAWData.setMetrics(Statistic.Metric.SEND_QUEUE_ERRORS);
-                                statRAWData.setMetricsData(1);
-                            }
-                        } else if(opCode == WorkCompletion.OpCode.RDMA_WRITE) {
-
-                            if(status == WorkCompletion.Status.SUCCESS) {
-                                statRAWData.setMetrics(Statistic.Metric.RDMA_WRITE, Statistic.Metric.RDMA_BYTES_WRITTEN, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytes, 1);
-
-                            } else {
-
-                                statRAWData.setMetrics(Statistic.Metric.SEND_QUEUE_ERRORS);
-                                statRAWData.setMetricsData(1);
-                            }
-                        } else if(opCode == WorkCompletion.OpCode.RDMA_READ) {
-
-                            if (status == WorkCompletion.Status.SUCCESS) {
-                                statRAWData.setMetrics(Statistic.Metric.RDMA_READ, Statistic.Metric.RDMA_BYTES_READ, Statistic.Metric.SEND_QUEUE_SUCCESS);
-                                statRAWData.setMetricsData(1, bytes, 1);
-
-                            } else {
-
-                                statRAWData.setMetrics(Statistic.Metric.SEND_QUEUE_ERRORS);
-                                statRAWData.setMetricsData(1);
-                            }
+                            statRAWData.setMetrics(Statistic.Metric.SEND_QUEUE_ERRORS);
+                            statRAWData.setMetricsData(1);
                         }
+                    } else if(opCode == WorkCompletion.OpCode.RDMA_WRITE) {
 
-                        if(status != WorkCompletion.Status.SUCCESS) {
-                            LOGGER.error("Send Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
-                        }
-
-                        for(var statisticManager : statisticManagers) {
-                            statisticManager.pushRAWData(statRAWData);
-                        }
-                    }
-
-                    receiveCompletionQueue.poll(completionArray);
-
-                    for(int i = 0; i < completionArray.getLength(); i++) {
-
-                        var completion = completionArray.get(i);
-
-                        var wrId = completion.getId();
-                        var status = completion.getStatus();
-                        var qpNumber = completion.getQueuePairNumber();
-
-                        var workRequestMapElement = ReliableConnection.fetchWorkRequestDataData(wrId);
-                        var connection = qpToConnection.get(qpNumber);
-
-
-                        var remoteLocalId = workRequestMapElement.remoteLocalId;
-                        var bytes = workRequestMapElement.scatterGatherElement.getLength();
-
-                        workRequestMapElement.receiveWorkRequest.releaseInstance();
-                        workRequestMapElement.scatterGatherElement.releaseInstance();
-                        workRequestMapElement.releaseInstance();
-
-                        var statRAWData = new RAWData();
-
-                        statRAWData.setKeyTypes(Statistic.KeyType.QP_NUM, Statistic.KeyType.CONNECTION_ID, Statistic.KeyType.REMOTE_LID);
-                        statRAWData.setKeyData(completion.getQueuePairNumber(), connection.getId(), connection.getRemoteLocalId());
-
-                        if (status == WorkCompletion.Status.SUCCESS) {
-                            connection.getHandshakeQueue().pushReceiveComplete();
-
-                            statRAWData.setMetrics(Statistic.Metric.RECEIVE, Statistic.Metric.BYTES_RECEIVED, Statistic.Metric.RECEIVE_QUEUE_SUCCESS);
+                        if(status == WorkCompletion.Status.SUCCESS) {
+                            statRAWData.setMetrics(Statistic.Metric.RDMA_WRITE, Statistic.Metric.RDMA_BYTES_WRITTEN, Statistic.Metric.SEND_QUEUE_SUCCESS);
                             statRAWData.setMetricsData(1, bytes, 1);
 
                         } else {
-                            LOGGER.error("Receive Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
 
-                            statRAWData.setMetrics(Statistic.Metric.RECEIVE_QUEUE_ERRORS);
+                            statRAWData.setMetrics(Statistic.Metric.SEND_QUEUE_ERRORS);
                             statRAWData.setMetricsData(1);
                         }
+                    } else if(opCode == WorkCompletion.OpCode.RDMA_READ) {
 
-                        for(var statisticManager : statisticManagers) {
-                            statisticManager.pushRAWData(statRAWData);
+                        if (status == WorkCompletion.Status.SUCCESS) {
+                            statRAWData.setMetrics(Statistic.Metric.RDMA_READ, Statistic.Metric.RDMA_BYTES_READ, Statistic.Metric.SEND_QUEUE_SUCCESS);
+                            statRAWData.setMetricsData(1, bytes, 1);
+
+                        } else {
+
+                            statRAWData.setMetrics(Statistic.Metric.SEND_QUEUE_ERRORS);
+                            statRAWData.setMetricsData(1);
                         }
                     }
+
+                    if(status != WorkCompletion.Status.SUCCESS) {
+                        LOGGER.error("Send Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
+
+                        try{
+                            connection.reset();
+                            connection.init();
+
+                            dch.sendConnectionRequest(new RCInformation(connection), remoteLocalId);
+                        } catch (Exception e) {
+                            LOGGER.error("Something went wrong recovering RC after error: {}", e.toString());
+                        }
+                    }
+
+                    for(var statisticManager : statisticManagers) {
+                        statisticManager.pushRAWData(statRAWData);
+                    }
                 }
-            } catch (IllegalStateException e) {
-                LOGGER.error("Illegal state exception {}", e);
-                e.printStackTrace();
+
+                receiveCompletionQueue.poll(completionArray);
+
+                for(int i = 0; i < completionArray.getLength(); i++) {
+
+                    var completion = completionArray.get(i);
+
+                    var wrId = completion.getId();
+                    var status = completion.getStatus();
+                    var qpNumber = completion.getQueuePairNumber();
+
+                    var workRequestMapElement = ReliableConnection.fetchWorkRequestDataData(wrId);
+                    var connection = qpToConnection.get(qpNumber);
+
+
+                    var remoteLocalId = workRequestMapElement.remoteLocalId;
+                    var bytes = workRequestMapElement.scatterGatherElement.getLength();
+
+                    workRequestMapElement.receiveWorkRequest.releaseInstance();
+                    workRequestMapElement.scatterGatherElement.releaseInstance();
+                    workRequestMapElement.releaseInstance();
+
+                    var statRAWData = new RAWData();
+
+                    statRAWData.setKeyTypes(Statistic.KeyType.QP_NUM, Statistic.KeyType.CONNECTION_ID, Statistic.KeyType.REMOTE_LID);
+                    statRAWData.setKeyData(completion.getQueuePairNumber(), connection.getId(), connection.getRemoteLocalId());
+
+                    if (status == WorkCompletion.Status.SUCCESS) {
+                        connection.getHandshakeQueue().pushReceiveComplete();
+
+                        statRAWData.setMetrics(Statistic.Metric.RECEIVE, Statistic.Metric.BYTES_RECEIVED, Statistic.Metric.RECEIVE_QUEUE_SUCCESS);
+                        statRAWData.setMetricsData(1, bytes, 1);
+
+                    } else {
+                        LOGGER.error("Receive Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
+
+                        statRAWData.setMetrics(Statistic.Metric.RECEIVE_QUEUE_ERRORS);
+                        statRAWData.setMetricsData(1);
+
+                        try{
+                            connection.reset();
+                            connection.init();
+
+                            dch.sendConnectionRequest(new RCInformation(connection), remoteLocalId);
+                        } catch (Exception e) {
+                            LOGGER.error("Something went wrong recovering RC after error: {}", e.toString());
+                        }
+                    }
+
+                    for(var statisticManager : statisticManagers) {
+                        statisticManager.pushRAWData(statRAWData);
+                    }
+                }
             }
+
         }
 
         public void shutdown() {
