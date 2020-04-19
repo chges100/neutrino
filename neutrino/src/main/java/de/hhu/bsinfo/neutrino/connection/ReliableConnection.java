@@ -127,6 +127,8 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         LOGGER.trace("Moved queue pair into RTS state");
 
+        remoteLid.set(remoteInfo.getLocalId());
+
         if(!handshake(MessageType.RC_CONNECT, HANDSHAKE_CONNECT_TIMEOUT)) {
             reset();
             init();
@@ -135,7 +137,6 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
             throw  new IOException("Connection " + id + ": Could not finish initial handshake to remote " + remoteInfo.getLocalId());
         }
 
-        remoteLid.set(remoteInfo.getLocalId());
         isConnected.getAndSet(true);
 
         LOGGER.debug("Connected RC with id {} to remote {}", id, remoteInfo.getLocalId());
@@ -358,10 +359,10 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         LOGGER.trace("Start to disconnect connection {} from {}", id, remoteLid);
 
+        handshake(MessageType.RC_DISCONNECT, HANDSHAKE_DISCONNECT_TIMEOUT);
+
         // set remote LID
         remoteLid.getAndSet(INVALID_LID);
-
-        handshake(MessageType.RC_DISCONNECT, HANDSHAKE_DISCONNECT_TIMEOUT);
 
         reset();
         init();

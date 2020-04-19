@@ -207,7 +207,7 @@ public class DynamicConnectionManager {
             if(kv.getValue().isConnected()) {
                 var remoteLid = kv.getValue().getRemoteLocalId();
 
-                if(remoteLid != INVALID_LID) {
+                if(kv.getValue().isConnected()) {
                     dch.initDisconnectForce(localId, remoteLid);
                 }
             }
@@ -410,7 +410,7 @@ public class DynamicConnectionManager {
                     var statRAWData = new RAWData();
 
                     statRAWData.setKeyTypes(Statistic.KeyType.QP_NUM, Statistic.KeyType.CONNECTION_ID, Statistic.KeyType.REMOTE_LID);
-                    statRAWData.setKeyData(completion.getQueuePairNumber(), connection.getId(), connection.getRemoteLocalId());
+                    statRAWData.setKeyData(completion.getQueuePairNumber(), connection.getId(), remoteLocalId);
 
                     if (status == WorkCompletion.Status.SUCCESS) {
                         connection.getHandshakeQueue().pushReceiveComplete();
