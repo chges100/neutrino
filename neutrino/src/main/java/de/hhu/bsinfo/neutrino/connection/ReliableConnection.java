@@ -120,13 +120,13 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
             throw new IOException("Unable to move queue pair into RTR state");
         }
 
-        LOGGER.info("Moved queue pair into RTR state with remote {}", remoteInfo.getLocalId());
+        LOGGER.trace("Moved queue pair into RTR state with remote {}", remoteInfo.getLocalId());
 
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToSendAttributesRC())) {
             throw new IOException("Unable to move queue pair into RTS state");
         }
 
-        LOGGER.info("Moved queue pair into RTS state");
+        LOGGER.trace("Moved queue pair into RTS state");
 
         if(!handshake(MessageType.RC_CONNECT, HANDSHAKE_CONNECT_TIMEOUT)) {
             reset();
@@ -138,6 +138,8 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         remoteLid.set(remoteInfo.getLocalId());
         isConnected.getAndSet(true);
+
+        LOGGER.debug("Connected RC with id {} to remote {}", id, remoteInfo.getLocalId());
 
         return true;
     }
@@ -308,7 +310,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     }
 
     private boolean handshake(MessageType msgType, long timeOut) throws IOException {
-        LOGGER.info("Handshake of connection {} with message {} started", getId(), msgType);
+        LOGGER.trace("Handshake of connection {} with message {} started", getId(), msgType);
 
         var message = new Message(getDeviceContext(), msgType, Message.provideGlobalId());
         var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
@@ -350,7 +352,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
 
         if(!isTimeOut) {
-            LOGGER.info("Handshake of connection {}  with message {} finished", getId(), msgType);
+            LOGGER.trace("Handshake of connection {}  with message {} finished", getId(), msgType);
         }
 
         message.close();
@@ -367,7 +369,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
             throw new IOException("Connection already disconnecting or disconnected");
         }
 
-        LOGGER.info("Start to disconnect connection {} from {}", id, remoteLid);
+        LOGGER.trace("Start to disconnect connection {} from {}", id, remoteLid);
 
         // set remote LID
         remoteLid.getAndSet(INVALID_LID);

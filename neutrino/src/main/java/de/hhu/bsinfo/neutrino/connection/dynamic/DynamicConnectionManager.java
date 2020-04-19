@@ -28,7 +28,7 @@ public class DynamicConnectionManager {
     private static final long RC_TIMEOUT = 2000;
 
     private static final int LOCAL_BUFFER_READ = 16;
-    private static final short MAX_LID = Short.MAX_VALUE;
+    private static final short INVALID_LID = Short.MAX_VALUE;
 
     private static final long CREATE_CONNECTION_TIMEOUT = 100;
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
@@ -74,8 +74,8 @@ public class DynamicConnectionManager {
 
         statisticManagers = new ArrayList<>();
 
-        rwLocks = new AtomicReadWriteLockArray(MAX_LID);
-        rcUsageTable = new RCUsageTable(MAX_LID);
+        rwLocks = new AtomicReadWriteLockArray(INVALID_LID);
+        rcUsageTable = new RCUsageTable(INVALID_LID);
 
         var deviceCnt = Context.getDeviceCount();
 
@@ -115,7 +115,7 @@ public class DynamicConnectionManager {
         localBufferHandler= new LocalBufferHandler(this);
 
         LOGGER.trace("Create UD to handle connection requests");
-        dch = new DynamicConnectionHandler(this, deviceContexts.get(0), MAX_LID);
+        dch = new DynamicConnectionHandler(this, deviceContexts.get(0), INVALID_LID);
         LOGGER.info("Data of UD: {}", dch);
 
         udInformationHandler = new UDInformationHandler(this, portUDP);
@@ -158,7 +158,6 @@ public class DynamicConnectionManager {
                 connected = true;
             } else {
                 rwLocks.unlockRead(remoteLocalId);
-                //LockSupport.parkNanos(REMOTE_EXEC_PARK_TIME);
             }
         }
 
@@ -166,9 +165,7 @@ public class DynamicConnectionManager {
 
         rcUsageTable.setUsed(remoteLocalId);
 
-        LOGGER.trace("Start EXEC on remote {} on connection {}", remoteLocalId, connection.getId());
         connection.execute(data, opCode, offset, length, remoteBufferInfo.getAddress(), remoteBufferInfo.getRemoteKey(), 0);
-        LOGGER.trace("Finished EXEC on remote {} on  connection {}", remoteLocalId, connection.getId());
 
         rwLocks.unlockRead(remoteLocalId);
 
@@ -212,30 +209,25 @@ public class DynamicConnectionManager {
         udInformationHandler.shutdown();
         LOGGER.debug("UDInformationHandler is shut down");
 
-        rcCompletionPoller.shutdown();
-        LOGGER.debug("RCCQPT is shut down");
+        LOGGER.debug("Begin disconnecting all existing connections");
 
+        for(var kv : connectionTable.entrySet()) {
+
+            if(kv.getValue().isConnected()) {
+                var remoteLid = kv.getValue().getRemoteLocalId();
+
+                if(remoteLid != INVALID_LID) {
+                    dch.sendDisconnectForce(localId, remoteLid);
+                }
+            }
+        }
 
         dch.shutdown();
         LOGGER.debug("DCH is shut down");
 
-        LOGGER.debug("Begin disconnecting all existing connections");
+        rcCompletionPoller.shutdown();
+        LOGGER.debug("RCCQPT is shut down");
 
-        for(var kv : connectionTable.entrySet()) {
-            if(kv.getValue().isConnected()) {
-                var connection = kv.getValue();
-
-                var t = new Thread(() -> {
-                    try {
-                        connection.disconnect();
-                        connection.close();
-                        connectionTable.remove(kv.getKey());
-                    } catch (IOException e) {
-                        LOGGER.debug("Error disconnecting connection {}: {}", connection.getId(), e);
-                    }
-                });
-            }
-        }
 
         printRemoteBufferInfos();
         printLocalBufferInfos();
@@ -474,7 +466,7 @@ public class DynamicConnectionManager {
                 try {
                     Thread.sleep(RC_TIMEOUT);
                 } catch (InterruptedException e) {
-                    LOGGER.trace("Timeout interrupted");
+                    interrupt();
                 }
             }
         }

@@ -111,7 +111,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         public void run() {
             var string = new NativeString(data, 0, DEFAULT_BUFFER_SIZE);
 
-            LOGGER.debug("TRY REMOTE WRITE {}", remoteLocalId);
+            LOGGER.debug("START REMOTE WRITE ON {}", remoteLocalId);
             try {
                 for(int i = 0; i < iterations; i++) {
                     string.set("Node " + dcm.getLocalId() + " iter " + (i + 1));
@@ -123,7 +123,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             }
 
 
-            LOGGER.info("Remote write complete {}", remoteLocalId);
+            LOGGER.info("FINISHED REMOTE WRITE ON {}", remoteLocalId);
 
             data.close();
         }
