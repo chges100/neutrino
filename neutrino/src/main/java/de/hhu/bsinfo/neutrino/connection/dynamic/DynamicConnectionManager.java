@@ -18,7 +18,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
@@ -464,13 +463,11 @@ public class DynamicConnectionManager {
         public void run() {
             while (isRunning) {
 
-                int size = rcUsageTable.getSize();
-
                 for(var remoteLid : connectionTable.keySet()) {
                     var used = rcUsageTable.getStatusAndReset(remoteLid);
 
                     if(used == 0) {
-                        dch.sendDisconnect(localId,  (short) (int) remoteLid);
+                        dch.sendDisconnectRequest(localId,  (short) (int) remoteLid);
                     }
                 }
 

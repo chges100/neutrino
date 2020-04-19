@@ -139,24 +139,25 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     protected void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_SEND_BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
-        LOGGER.debug("Send buffer info to {}", remoteLocalId);
+        LOGGER.trace("Send buffer info to {}", remoteLocalId);
     }
 
-    protected void sendDisconnect(short localId, short remoteLocalId) {
+    protected void sendDisconnectRequest(short localId, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_REQ_DISCONNECT, remoteLocalId, localId));
-        LOGGER.trace("Send disconnect to {}", remoteLocalId);
+        LOGGER.trace("Send disconnect request to {}", remoteLocalId);
+    }
+
+    protected void sendDisconnectForce(short localId, short remoteLocalId) {
+        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_SEND_DISCONNECT_FORCE, remoteLocalId, localId));
+        LOGGER.trace("Send disconnect force to {}", remoteLocalId);
     }
 
     protected void sendBufferAck(short localId, long msgId, short remoteLocalId) {
         executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_RESP_BUFFER_ACK, remoteLocalId, msgId, localId));
-        LOGGER.debug("Send Buffer ack to {}", remoteLocalId);
+        LOGGER.trace("Send Buffer ack to {}", remoteLocalId);
     }
 
     protected long sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
-        if(msgType == MessageType.HANDLER_RESP_BUFFER_ACK) {
-            LOGGER.debug("BUFFER ACK!!! REMOTE {} PAYLOAD {}", remoteInfo.getLocalId(), payload);
-        }
-
         var sge = sendSGEProvider.getSGE();
         if(sge == null) {
             LOGGER.error("Cannot post another send request");
@@ -203,7 +204,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         LOGGER.debug("Executor is shut down");
 
         close();
-
     }
 
     @Override
@@ -316,7 +316,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     handleBufferInfo();
                     break;
                 case HANDLER_REQ_DISCONNECT:
-                    handleDisconnect();
+                    handleDisconnectRequest();
+                    break;
+                case HANDLER_SEND_DISCONNECT_FORCE:
+                    handleDisconnectForce();
                     break;
                 case HANDLER_RESP_BUFFER_ACK:
                     LOGGER.debug("RECEIVED BUFFER ACK");
@@ -379,9 +382,14 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             }
         }
 
-        private void handleDisconnect() {
-            LOGGER.info("Got disconnect from {}", payload[0]);
+        private void handleDisconnectRequest() {
+            LOGGER.info("Got disconnect request from {}", payload[0]);
             // todo
+        }
+
+        private void handleDisconnectForce() {
+            LOGGER.info("Got disconnect request from {}", payload[0]);
+
         }
     }
 
@@ -399,6 +407,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         @Override
         public void run() {
 
+            // poll until remote UD pair data is available
             registeredHandlerTable.poll(remoteLocalId);
 
             switch(msgType) {
@@ -409,7 +418,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     handleConnectionRequest();
                     break;
                 case HANDLER_REQ_DISCONNECT:
-                    handleDisconnect();
+                    handleDisconnectRequest();
+                    break;
+                case HANDLER_SEND_DISCONNECT_FORCE:
+                    handleDisconnectForce();
                     break;
                 case HANDLER_RESP_BUFFER_ACK:
                     handleBufferAck();
@@ -446,7 +458,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
         }
 
-        private void handleDisconnect() {
+        private void handleDisconnectRequest() {
 
             var locked = dcm.rwLocks.writeLock(remoteLocalId, 100);
 
@@ -454,9 +466,11 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
 
                 dcm.rwLocks.unlockWrite(remoteLocalId);
-
-
             }
+        }
+
+        private void handleDisconnectForce() {
+
         }
 
         private void handleBufferAck() {
