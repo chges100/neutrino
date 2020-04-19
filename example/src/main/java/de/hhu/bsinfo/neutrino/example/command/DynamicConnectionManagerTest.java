@@ -26,9 +26,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
-    private static final int DEFAULT_BUFFER_SIZE = 1024;
+    private static final int DEFAULT_BUFFER_SIZE = 2048;
     private static final int DEFAULT_DEVICE_ID = 0;
-    private static final int ITERATIONS = 50;
+    private static final int DEFAULT_ITERATIONS = 50;
+    private static final int DEFAULT_THREAD_COUNT = 2;
 
     private DynamicConnectionManager dcm;
 
@@ -42,10 +43,25 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             description = "Sets the InfiniBand device to be used.")
     private int deviceId = 0;
 
+    @CommandLine.Option(
+            names = { "-b", "--bufferSize" },
+            description = "Sets the buffer size that should be used for RDMA.")
+    private int bufferSize = DEFAULT_BUFFER_SIZE;
+
+    @CommandLine.Option(
+            names = { "-i", "--iterations" },
+            description = "Sets the iteration count how often the buffer is written by every thread.")
+    private int iterations = DEFAULT_ITERATIONS;
+
+    @CommandLine.Option(
+            names = { "-t", "--threadCount" },
+            description = "Sets the amaount of threads for each remote.")
+    private int threadCount = DEFAULT_THREAD_COUNT;
+
     @Override
     public Void call() throws Exception {
 
-        dcm = new DynamicConnectionManager(port);
+        dcm = new DynamicConnectionManager(port, bufferSize);
         dcm.init();
 
         var statistics = new StatisticManager();
@@ -59,25 +75,27 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var remoteLids = dcm.getRemoteLocalIds();
         var workloads = new WorkloadExecutor[remoteLids.length];
-        var executor  = (ThreadPoolExecutor) Executors.newFixedThreadPool(remoteLids.length);
+        var executor  = (ThreadPoolExecutor) Executors.newFixedThreadPool(remoteLids.length * threadCount);
 
         for (short remoteLid : remoteLids) {
-            executor.submit(new WorkloadExecutor(ITERATIONS, remoteLid));
+            for(int i = 0; i < threadCount; i++) {
+                executor.submit(new WorkloadExecutor(remoteLid));
+            }
         }
 
-        TimeUnit.SECONDS.sleep(8);
+        /*TimeUnit.SECONDS.sleep(8);
 
         for (short remoteLid : remoteLids) {
-            executor.submit(new WorkloadExecutor(ITERATIONS, remoteLid));
-        }
+            executor.submit(new WorkloadExecutor(remoteLid));
+        }*/
 
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.SECONDS.sleep(4);
 
         statistics.shutDown();
 
 
         try {
-            executor.shutdownNow();
+            executor.shutdown();
             executor.awaitTermination(500, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             LOGGER.info("Not all workload threads terminated");
@@ -95,7 +113,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         private RegisteredBuffer data;
         private long offset;
         private short remoteLocalId;
-        private int iterations = 1;
 
         public WorkloadExecutor(RegisteredBuffer data, long offset, short remoteLocalId) {
             this.data = data;
@@ -103,18 +120,17 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             this.remoteLocalId = remoteLocalId;
         }
 
-        public WorkloadExecutor(int iterations, short remoteLocalId) {
+        public WorkloadExecutor(short remoteLocalId) {
             this.remoteLocalId = remoteLocalId;
-            this.iterations = iterations;
 
             this.offset = 0;
-            this.data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, DEFAULT_BUFFER_SIZE);
+            this.data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
             data.clear();
         }
 
         @Override
         public void run() {
-            var string = new NativeString(data, 0, DEFAULT_BUFFER_SIZE);
+            var string = new NativeString(data, 0, bufferSize);
 
             var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
 
@@ -123,7 +139,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
                 for(int i = 0; i < iterations; i++) {
                     string.set("Node " + dcm.getLocalId() + " iter " + (i + 1));
 
-                    dcm.remoteWrite(data, offset, DEFAULT_BUFFER_SIZE, remoteBuffer, remoteLocalId);
+                    dcm.remoteWrite(data, offset, bufferSize, remoteBuffer, remoteLocalId);
                 }
             } catch (IOException e) {
                 LOGGER.error("Could not complete workload on {}", remoteLocalId);

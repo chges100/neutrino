@@ -36,7 +36,7 @@ public class LocalBufferHandler {
     protected void createAndRegisterBuffer(int remoteLocalId) {
         if(!localBuffers.containsKey(remoteLocalId)) {
 
-            var buffer = dcm.allocRegisteredBuffer(0, DynamicConnectionManager.BUFFER_SIZE);
+            var buffer = dcm.allocRegisteredBuffer(0, dcm.rdmaBufferSize);
             buffer.clear();
 
             registerBuffer(remoteLocalId, buffer);

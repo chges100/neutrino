@@ -24,7 +24,6 @@ import java.util.List;
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
-    protected static final long BUFFER_SIZE = 1024*1024;
     private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 200;
 
     private static final long RC_TIMEOUT = 2000;
@@ -57,6 +56,8 @@ public class DynamicConnectionManager {
     protected final AtomicReadWriteLockArray rwLocks;
     protected final RCUsageTable rcUsageTable;
 
+    protected final long rdmaBufferSize;
+
     private UDInformationHandler udInformationHandler;
 
     private final RCCompletionQueuePollThread rcCompletionPoller;
@@ -68,9 +69,11 @@ public class DynamicConnectionManager {
 
 
 
-    public DynamicConnectionManager(int port) throws IOException {
+    public DynamicConnectionManager(int port, long rdmaBufferSize) throws IOException {
 
         deviceContexts = new ArrayList<>();
+
+        this.rdmaBufferSize = rdmaBufferSize;
 
         connectionTable = new NonBlockingHashMapLong<>();
         qpToConnection = new NonBlockingHashMapLong<>();
