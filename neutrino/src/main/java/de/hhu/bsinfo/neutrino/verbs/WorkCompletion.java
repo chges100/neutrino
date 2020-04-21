@@ -160,7 +160,7 @@ public class WorkCompletion extends Struct {
 
     public enum OpCode {
         SEND(0), RDMA_WRITE(1), RDMA_READ(2), COMP_SWAP(3), FETCH_ADD(4),
-        BIND_MW(5), LOCAL_INV(6), TSO(7);
+        BIND_MW(5), LOCAL_INV(6), TSO(7), RECV(8), RECV_RDMA_WITH_IMM(8);
 
         private static final OpCode[] VALUES;
 

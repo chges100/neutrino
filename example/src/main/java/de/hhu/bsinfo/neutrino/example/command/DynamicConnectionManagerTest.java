@@ -63,19 +63,15 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     @Override
     public Void call() throws Exception {
 
-        dcm = new DynamicConnectionManager(port, bufferSize);
+        var statistics = new StatisticManager();
+
+        dcm = new DynamicConnectionManager(port, bufferSize, statistics);
         dcm.init();
 
         startTime = new AtomicLong(0);
         endTime = new AtomicLong(0);
 
-        var statistics = new StatisticManager();
-        statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_WRITE);
-        statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_BYTES_WRITTEN);
-        statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.BYTES_SEND);
-        statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.BYTES_RECEIVED);
 
-        dcm.registerStatisticManager(statistics);
 
         var data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
         data.clear();
@@ -102,20 +98,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         TimeUnit.SECONDS.sleep(4);
 
-        var rdmaBytesWrittenPerNode = statistics.getStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_BYTES_WRITTEN);
-        AtomicLong rdmaBytesWritten = new AtomicLong();
-
-        rdmaBytesWrittenPerNode.statistic.forEach((key, value) -> {
-            rdmaBytesWritten.addAndGet(value);
-        });
-
-        var bytesPerNs = rdmaBytesWritten.get() / (double) (endTime.get() - startTime.get());
-        var bytesPerS = bytesPerNs * 1000000000d;
-        var MBytesPerS = bytesPerS / (1024 * 1024);
-
-        statistics.shutDown();
-        LOGGER.debug("Result: {} Mbyte/s", MBytesPerS);
-
 
         try {
             executor.shutdown();
@@ -127,7 +109,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         dcm.shutdown();
 
-        statistics.printResults();
 
         return null;
 

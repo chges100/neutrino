@@ -1,37 +1,25 @@
 package de.hhu.bsinfo.neutrino.connection.statistic;
 
+import de.hhu.bsinfo.neutrino.util.Poolable;
+import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
 import org.agrona.collections.Long2LongCounterMap;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 public class Statistic {
-    public final Long2LongCounterMap statistic;
-    public final KeyType keyType;
-    public final Metric metric;
+    public final short remoteLocalId;
+    public final AtomicLong rdmaBytesWritten = new AtomicLong(0);
+    public final AtomicLong rdmaBytesRead = new AtomicLong(0);
+    public final AtomicLong bytesSent = new AtomicLong(0);
+    public final AtomicLong bytesReceived = new AtomicLong(0);
 
-    public Statistic(KeyType keyType, Metric metric) {
-        this.keyType = keyType;
-        this.metric = metric;
+    public final AtomicLong rdmaWriteCount = new AtomicLong(0);
+    public final AtomicLong rdmaReadCount = new AtomicLong(0);
+    public final AtomicLong sendCound = new AtomicLong(0);
+    public final AtomicLong receiveCount = new AtomicLong(0);
+    public final AtomicLong errorCount = new AtomicLong(0);
 
-        this.statistic = new Long2LongCounterMap(0);
-    }
-
-    public enum KeyType {
-        REMOTE_LID,
-        QP_NUM,
-        CONNECTION_ID
-    }
-
-    public enum Metric {
-        SEND,
-        RECEIVE,
-        BYTES_SEND,
-        BYTES_RECEIVED,
-        RDMA_WRITE,
-        RDMA_READ,
-        RDMA_BYTES_WRITTEN,
-        RDMA_BYTES_READ,
-        SEND_QUEUE_SUCCESS,
-        RECEIVE_QUEUE_SUCCESS,
-        SEND_QUEUE_ERRORS,
-        RECEIVE_QUEUE_ERRORS
+    public Statistic(short remoteLocalId) {
+        this.remoteLocalId = remoteLocalId;
     }
 }
