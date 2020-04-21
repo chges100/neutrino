@@ -24,7 +24,7 @@ import java.util.List;
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
-    private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 200;
+    private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 500;
 
     private static final long RC_TIMEOUT = 2000;
 
@@ -34,8 +34,8 @@ public class DynamicConnectionManager {
     private static final long CREATE_CONNECTION_TIMEOUT = 100;
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
-    private static final int RC_COMPLETION_QUEUE_SIZE = 2000;
-    private static final int RC_QUEUE_PAIR_SIZE = 200;
+    private static final int RC_COMPLETION_QUEUE_SIZE = 4000;
+    private static final int RC_QUEUE_PAIR_SIZE = 800;
 
     private final short localId;
 

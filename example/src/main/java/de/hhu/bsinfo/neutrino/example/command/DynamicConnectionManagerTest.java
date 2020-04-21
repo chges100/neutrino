@@ -9,11 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
-import java.io.IOException;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 @CommandLine.Command(
@@ -26,12 +23,16 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
-    private static final int DEFAULT_BUFFER_SIZE = 2048;
+    private static final int DEFAULT_BUFFER_SIZE = 1024;
     private static final int DEFAULT_DEVICE_ID = 0;
     private static final int DEFAULT_ITERATIONS = 50;
     private static final int DEFAULT_THREAD_COUNT = 2;
 
     private DynamicConnectionManager dcm;
+    private CyclicBarrier barrier;
+
+    private AtomicLong startTime;
+    private AtomicLong endTime;
 
     @CommandLine.Option(
             names = {"-p", "--port"},
@@ -64,6 +65,9 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         dcm = new DynamicConnectionManager(port, bufferSize);
         dcm.init();
 
+        startTime = new AtomicLong(0);
+        endTime = new AtomicLong(0);
+
         var statistics = new StatisticManager();
         statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_WRITE);
         statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_BYTES_WRITTEN);
@@ -77,21 +81,29 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var workloads = new WorkloadExecutor[remoteLids.length];
         var executor  = (ThreadPoolExecutor) Executors.newFixedThreadPool(remoteLids.length * threadCount);
 
+        barrier = new CyclicBarrier(remoteLids.length * threadCount);
+
         for (short remoteLid : remoteLids) {
             for(int i = 0; i < threadCount; i++) {
                 executor.submit(new WorkloadExecutor(remoteLid));
             }
         }
 
-        /*TimeUnit.SECONDS.sleep(8);
-
-        for (short remoteLid : remoteLids) {
-            executor.submit(new WorkloadExecutor(remoteLid));
-        }*/
-
         TimeUnit.SECONDS.sleep(4);
 
+        var rdmaBytesWrittenPerNode = statistics.getStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_BYTES_WRITTEN);
+        AtomicLong rdmaBytesWritten = new AtomicLong();
+
+        rdmaBytesWrittenPerNode.statistic.forEach((key, value) -> {
+            rdmaBytesWritten.addAndGet(value);
+        });
+
+        var bytesPerNs = rdmaBytesWritten.get() / (double) (endTime.get() - startTime.get());
+        var bytesPerS = bytesPerNs * 1000000000d;
+        var MBytesPerS = bytesPerS / (1024 * 1024);
+
         statistics.shutDown();
+        LOGGER.debug("Result: {} Mbyte/s", MBytesPerS);
 
 
         try {
@@ -131,22 +143,34 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         @Override
         public void run() {
             var string = new NativeString(data, 0, bufferSize);
-
+            string.set("Node " + dcm.getLocalId());
             var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
 
-            LOGGER.debug("START REMOTE WRITE ON {}", remoteLocalId);
             try {
-                for(int i = 0; i < iterations; i++) {
-                    string.set("Node " + dcm.getLocalId() + " iter " + (i + 1));
+                barrier.await();
 
+                LOGGER.debug("START REMOTE WRITE ON {}", remoteLocalId);
+
+                startTime.compareAndSet(0, System.nanoTime());
+
+                for(int i = 0; i < iterations; i++) {
                     dcm.remoteWrite(data, offset, bufferSize, remoteBuffer, remoteLocalId);
                 }
-            } catch (IOException e) {
+
+                var tmp = System.nanoTime();
+
+                LOGGER.info("FINISHED REMOTE WRITE ON {}", remoteLocalId);
+
+                endTime.updateAndGet(value -> value < tmp ? tmp : value);
+
+            } catch (Exception e) {
                 LOGGER.error("Could not complete workload on {}", remoteLocalId);
             }
 
 
-            LOGGER.info("FINISHED REMOTE WRITE ON {}", remoteLocalId);
+
+
+
 
             data.close();
         }
