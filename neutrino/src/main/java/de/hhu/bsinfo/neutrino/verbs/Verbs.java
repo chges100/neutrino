@@ -84,6 +84,7 @@ public final class Verbs {
 
     static native void createCompletionQueue(long contextHandle, int maxElements, long userContextHandle, long completionChannelHandle, int completionVector, long resultHandle);
     static native void pollCompletionQueue(long completionQueueHandle, int numEntries, long arrayHandle, long resultHandle);
+    static native void resizeCompletionQueue(long CompletionQueueHandle, int cqe, long resultHandle);
     static native void requestNotification(long completionQueueHandle, int solicitedOnly, long resultHandle);
     static native void acknowledgeCompletionEvents(long completionQueueHandle, int ackCount);
     static native void destroyCompletionQueue(long completionQueueHandle, long resultHandle);

@@ -73,6 +73,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_WRITE);
         statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.RDMA_BYTES_WRITTEN);
         statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.BYTES_SEND);
+        statistics.registerStatistic(Statistic.KeyType.REMOTE_LID, Statistic.Metric.BYTES_RECEIVED);
 
         dcm.registerStatisticManager(statistics);
 

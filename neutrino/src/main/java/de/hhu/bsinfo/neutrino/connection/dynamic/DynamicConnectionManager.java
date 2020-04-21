@@ -34,7 +34,7 @@ public class DynamicConnectionManager {
     private static final long CREATE_CONNECTION_TIMEOUT = 100;
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
-    private static final int RC_COMPLETION_QUEUE_SIZE = 800;
+    private static final int RC_COMPLETION_QUEUE_SIZE = 600;
     private static final int RC_QUEUE_PAIR_SIZE = 100;
 
     private final short localId;
@@ -406,7 +406,7 @@ public class DynamicConnectionManager {
 
 
                     var remoteLocalId = workRequestMapElement.remoteLocalId;
-                    var bytes = workRequestMapElement.scatterGatherElement.getLength();
+                    var bytes = completion.getByteCount();
 
                     workRequestMapElement.receiveWorkRequest.releaseInstance();
                     workRequestMapElement.scatterGatherElement.releaseInstance();

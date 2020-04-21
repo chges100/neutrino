@@ -57,6 +57,19 @@ public class CompletionQueue extends Struct implements AutoCloseable {
         return !isError;
     }
 
+    public boolean resize(int numEntries) {
+        var result = (Result) Verbs.getPoolableInstance(Result.class);
+
+        Verbs.resizeCompletionQueue(getHandle(), numEntries, result.getHandle());
+        boolean isError = result.isError();
+        if (isError) {
+            LOGGER.error("Polling completion queue failed with error [{}]: {}", result.getStatus(), result.getStatusMessage());
+        }
+
+        result.releaseInstance();
+        return !isError;
+    }
+
     public boolean requestNotification(boolean solicitedOnly) {
         var result = (Result) Verbs.getPoolableInstance(Result.class);
 
