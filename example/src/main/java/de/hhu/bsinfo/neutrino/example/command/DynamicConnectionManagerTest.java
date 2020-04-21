@@ -8,6 +8,7 @@ import de.hhu.bsinfo.neutrino.data.NativeString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
+import org.threadly.concurrent.*;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -23,10 +24,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
-    private static final int DEFAULT_BUFFER_SIZE = 1024;
+    private static final int DEFAULT_BUFFER_SIZE = 32*1024*1024;
     private static final int DEFAULT_DEVICE_ID = 0;
-    private static final int DEFAULT_ITERATIONS = 50;
-    private static final int DEFAULT_THREAD_COUNT = 2;
+    private static final int DEFAULT_ITERATIONS = 25;
+    private static final int DEFAULT_THREAD_COUNT = 8;
 
     private DynamicConnectionManager dcm;
     private CyclicBarrier barrier;
@@ -75,17 +76,26 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         dcm.registerStatisticManager(statistics);
 
+        var data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
+        data.clear();
+
+        var string = new NativeString(data, 0, bufferSize);
+        string.set("Node " + dcm.getLocalId());
+
         TimeUnit.SECONDS.sleep(2);
 
         var remoteLids = dcm.getRemoteLocalIds();
         var workloads = new WorkloadExecutor[remoteLids.length];
-        var executor  = (ThreadPoolExecutor) Executors.newFixedThreadPool(remoteLids.length * threadCount);
+        //var executor  = (ThreadPoolExecutor) Executors.newFixedThreadPool(remoteLids.length * threadCount);
+
+        var executor = new PriorityScheduler(remoteLids.length * threadCount);
+
 
         barrier = new CyclicBarrier(remoteLids.length * threadCount);
 
         for (short remoteLid : remoteLids) {
             for(int i = 0; i < threadCount; i++) {
-                executor.submit(new WorkloadExecutor(remoteLid));
+                executor.submit(new WorkloadExecutor(data, 0, remoteLid));
             }
         }
 
@@ -108,7 +118,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         try {
             executor.shutdown();
-            executor.awaitTermination(500, TimeUnit.MILLISECONDS);
+            //executor.awaitTermination(500, TimeUnit.MILLISECONDS);
+            executor.awaitTermination(500);
         } catch (Exception e) {
             LOGGER.info("Not all workload threads terminated");
         }
@@ -132,18 +143,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             this.remoteLocalId = remoteLocalId;
         }
 
-        public WorkloadExecutor(short remoteLocalId) {
-            this.remoteLocalId = remoteLocalId;
-
-            this.offset = 0;
-            this.data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
-            data.clear();
-        }
-
         @Override
         public void run() {
-            var string = new NativeString(data, 0, bufferSize);
-            string.set("Node " + dcm.getLocalId());
             var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
 
             try {
@@ -167,12 +168,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
                 LOGGER.error("Could not complete workload on {}", remoteLocalId);
             }
 
-
-
-
-
-
-            data.close();
+            //data.close();
         }
     }
 }
