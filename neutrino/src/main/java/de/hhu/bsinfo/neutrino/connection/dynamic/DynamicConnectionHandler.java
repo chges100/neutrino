@@ -137,37 +137,37 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void initConnectionRequest(RCInformation localQP, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_REQ_CONNECTION, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
+        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_REQ_CONNECTION, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
         LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
     }
 
     protected void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_SEND_BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
+        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_SEND_BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
         LOGGER.trace("Send buffer info to {}", remoteLocalId);
     }
 
     protected void initDisconnectRequest(short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_REQ_DISCONNECT, remoteLocalId, localId));
+        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_REQ_DISCONNECT, remoteLocalId, localId));
         LOGGER.trace("Send disconnect request to {}", remoteLocalId);
     }
 
     protected void initDisconnectForce(short localId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_SEND_DISCONNECT_FORCE, remoteLocalId, localId));
+        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_SEND_DISCONNECT_FORCE, remoteLocalId, localId));
         LOGGER.trace("Send disconnect force to {}", remoteLocalId);
     }
 
     protected void sendBufferAck(short localId, long msgId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_RESP_BUFFER_ACK, remoteLocalId, msgId, localId));
+        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_BUFFER_ACK, remoteLocalId, msgId, localId));
         LOGGER.trace("Send Buffer ack to {}", remoteLocalId);
     }
 
     protected void sendConnectionResponse(long msgId, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_RESP_CONNECTION_REQ, remoteLocalId, msgId));
+        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_CONNECTION_REQ, remoteLocalId, msgId));
         LOGGER.trace("Send responst to connection request to {}", remoteLocalId);
     }
 
     protected void sendDisconnectResponse(long msgId, long response, short remoteLocalId) {
-        executor.submit(new OutgoingMessageHandler(MessageType.HANDLER_RESP_DISCONNECT_REQ, remoteLocalId, msgId, response));
+        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_DISCONNECT_REQ, remoteLocalId, msgId, response));
         LOGGER.trace("Send disconnect request to {}", remoteLocalId);
     }
 
@@ -287,9 +287,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     var message = new LocalMessage(LocalBuffer.wrap(sge.getAddress(), sge.getLength()), UnreliableDatagram.UD_Receive_Offset);
 
                     try {
-                        executor.submit(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
+                        executor.execute(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
                     } catch (RejectedExecutionException e) {
-                        LOGGER.error("Submitting task failed with exception: {}", e);
+                        LOGGER.error("executeting task failed with exception: {}", e);
                     }
 
                     receiveSGEProvider.returnSGE(sge);
