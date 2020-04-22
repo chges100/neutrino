@@ -484,6 +484,11 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         @Override
         public void releaseInstance() {
+            sendWorkRequest = null;
+            receiveWorkRequest = null;
+            scatterGatherElement = null;
+            remoteLocalId = 0;
+
             workRequestMapElementPool.returnInstance(this);
         }
     }

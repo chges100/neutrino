@@ -50,7 +50,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private final DynamicConnectionManager dcm;
     private final Int2ObjectHashMap<UDInformation> remoteHandlerTables;
     private final RegisteredHandlerTable registeredHandlerTable;
-    private final ThreadPoolExecutor executor;
+
 
     private final UDInformation localUDInformation;
 
@@ -81,7 +81,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         remoteHandlerTables = new Int2ObjectHashMap<>();
         registeredHandlerTable = new RegisteredHandlerTable(maxLid);
-        executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
         ownSendWrIdProvider = new AtomicInteger(0);
         ownReceiveWrIdProvider = new AtomicInteger(0);
@@ -137,37 +136,37 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void initConnectionRequest(RCInformation localQP, short remoteLocalId) {
-        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_REQ_CONNECTION, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
+        dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_REQ_CONNECTION, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
         LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
     }
 
     protected void sendBufferInfo(BufferInformation bufferInformation, short localId, short remoteLocalId) {
-        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_SEND_BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
+        dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_SEND_BUFFER_INFO, remoteLocalId, localId, bufferInformation.getAddress(), bufferInformation.getCapacity(), bufferInformation.getRemoteKey()));
         LOGGER.trace("Send buffer info to {}", remoteLocalId);
     }
 
     protected void initDisconnectRequest(short localId, short remoteLocalId) {
-        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_REQ_DISCONNECT, remoteLocalId, localId));
+        dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_REQ_DISCONNECT, remoteLocalId, localId));
         LOGGER.trace("Send disconnect request to {}", remoteLocalId);
     }
 
     protected void initDisconnectForce(short localId, short remoteLocalId) {
-        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_SEND_DISCONNECT_FORCE, remoteLocalId, localId));
+        dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_SEND_DISCONNECT_FORCE, remoteLocalId, localId));
         LOGGER.trace("Send disconnect force to {}", remoteLocalId);
     }
 
     protected void sendBufferAck(short localId, long msgId, short remoteLocalId) {
-        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_BUFFER_ACK, remoteLocalId, msgId, localId));
+        dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_BUFFER_ACK, remoteLocalId, msgId, localId));
         LOGGER.trace("Send Buffer ack to {}", remoteLocalId);
     }
 
     protected void sendConnectionResponse(long msgId, short remoteLocalId) {
-        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_CONNECTION_REQ, remoteLocalId, msgId));
+        dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_CONNECTION_REQ, remoteLocalId, msgId));
         LOGGER.trace("Send responst to connection request to {}", remoteLocalId);
     }
 
     protected void sendDisconnectResponse(long msgId, long response, short remoteLocalId) {
-        executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_DISCONNECT_REQ, remoteLocalId, msgId, response));
+        dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_DISCONNECT_REQ, remoteLocalId, msgId, response));
         LOGGER.trace("Send disconnect request to {}", remoteLocalId);
     }
 
@@ -212,13 +211,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void shutdown() {
-        executor.shutdownNow();
-
-        try {
-            executor.awaitTermination(500, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            LOGGER.info("Thread Pool termination not yet finished - continue shutdown");
-        }
 
         LOGGER.debug("Executor is shut down");
 
@@ -287,7 +279,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     var message = new LocalMessage(LocalBuffer.wrap(sge.getAddress(), sge.getLength()), UnreliableDatagram.UD_Receive_Offset);
 
                     try {
-                        executor.execute(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
+                        dcm.executor.execute(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
                     } catch (RejectedExecutionException e) {
                         LOGGER.error("executeting task failed with exception: {}", e);
                     }

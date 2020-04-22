@@ -160,7 +160,7 @@ public class WorkCompletion extends Struct {
 
     public enum OpCode {
         SEND(0), RDMA_WRITE(1), RDMA_READ(2), COMP_SWAP(3), FETCH_ADD(4),
-        BIND_MW(5), LOCAL_INV(6), TSO(7), RECV(8), RECV_RDMA_WITH_IMM(8);
+        BIND_MW(5), LOCAL_INV(6), TSO(7), RECV(128), RECV_RDMA_WITH_IMM(129);
 
         private static final OpCode[] VALUES;
 
@@ -193,7 +193,7 @@ public class WorkCompletion extends Struct {
 
             @Override
             public OpCode toEnum(int integer) {
-                if (integer < SEND.value || integer > TSO.value) {
+                if (integer < SEND.value || integer > RECV_RDMA_WITH_IMM.value) {
                     throw new IllegalArgumentException(String.format("Unknown operation code provided %d", integer));
                 }
 

@@ -17,6 +17,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
@@ -52,6 +55,8 @@ public class DynamicConnectionManager {
     protected final AtomicReadWriteLockArray rwLocks;
     protected final RCUsageTable rcUsageTable;
 
+    protected final ThreadPoolExecutor executor;
+
     protected final long rdmaBufferSize;
 
     private UDInformationHandler udInformationHandler;
@@ -73,6 +78,8 @@ public class DynamicConnectionManager {
         qpToConnection = new NonBlockingHashMapLong<>();
 
         this.statisticManager = statisticManager;
+        executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
+
 
         rwLocks = new AtomicReadWriteLockArray(INVALID_LID);
         rcUsageTable = new RCUsageTable(INVALID_LID);
@@ -207,11 +214,21 @@ public class DynamicConnectionManager {
             }
         }
 
-        dch.shutdown();
-        LOGGER.debug("DCH is shut down");
+        executor.shutdownNow();
+
+        try {
+            executor.awaitTermination(500, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            LOGGER.info("Thread Pool termination not yet finished - continue shutdown");
+        }
 
         rcCompletionPoller.shutdown();
         LOGGER.debug("RCCQPT is shut down");
+
+        dch.shutdown();
+        LOGGER.debug("DCH is shut down");
+
+
 
 
         printRemoteBufferInfos();
@@ -296,7 +313,11 @@ public class DynamicConnectionManager {
                 var completionArray = new CompletionQueue.WorkCompletionArray(RC_COMPLETION_QUEUE_POLL_BATCH_SIZE);
 
                 completionQueue.poll(completionArray);
-                //todo executor
+
+                if(completionArray.getLength() > 0) {
+                    executor.execute(new WorkCompletionConsumer(completionArray));
+                }
+
             }
         }
 
@@ -330,7 +351,12 @@ public class DynamicConnectionManager {
                 var bytes = workRequestMapElement.scatterGatherElement.getLength();
                 var byteCount = completion.getByteCount();
 
-                workRequestMapElement.sendWorkRequest.releaseInstance();
+                if(opCode.getValue() < 128) {
+                    workRequestMapElement.sendWorkRequest.releaseInstance();
+                } else {
+                    workRequestMapElement.receiveWorkRequest.releaseInstance();
+                }
+
                 workRequestMapElement.scatterGatherElement.releaseInstance();
                 workRequestMapElement.releaseInstance();
 
