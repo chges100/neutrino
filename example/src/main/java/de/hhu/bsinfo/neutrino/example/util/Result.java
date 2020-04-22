@@ -4,12 +4,12 @@ public class Result {
 
     private static final char[] metricTable = {
             0,
-            'k',
-            'm',
-            'g',
-            't',
-            'p',
-            'e'
+            'K',
+            'M',
+            'G',
+            'T',
+            'P',
+            'E'
     };
 
     private final long operationCount;
@@ -44,8 +44,8 @@ public class Result {
         double formattedValue = value;
 
         int counter = 0;
-        while (formattedValue > 1000 && counter < metricTable.length) {
-            formattedValue = formattedValue / 1000;
+        while (formattedValue > 1024 && counter < metricTable.length) {
+            formattedValue = formattedValue / 1024;
             counter++;
         }
 

@@ -35,7 +35,7 @@ public class DynamicConnectionManager {
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
     private static final int RC_COMPLETION_QUEUE_SIZE = 1000;
-    private static final int RC_QUEUE_PAIR_SIZE = 100;
+    private static final int RC_QUEUE_PAIR_SIZE = 500;
 
     private final short localId;
 
@@ -227,12 +227,13 @@ public class DynamicConnectionManager {
 
         try {
             executor.awaitTermination(500, TimeUnit.MILLISECONDS);
+            LOGGER.debug("Executor is shut down");
         } catch (InterruptedException e) {
             LOGGER.info("Thread Pool termination not yet finished - continue shutdown");
         }
 
-
-
+        dch.close();
+        LOGGER.debug("DCH is closed");
 
         printRemoteBufferInfos();
         printLocalBufferInfos();
@@ -391,8 +392,7 @@ public class DynamicConnectionManager {
                     statisticManager.putErrorEvent(remoteLocalId);
 
                     try{
-                        connection.reset();
-                        connection.init();
+                        connection.resetFromError();
 
                         dch.initConnectionRequest(new RCInformation(connection), remoteLocalId);
                     } catch (Exception e) {

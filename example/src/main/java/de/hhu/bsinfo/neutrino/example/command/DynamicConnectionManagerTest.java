@@ -29,6 +29,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final int DEFAULT_DEVICE_ID = 0;
     private static final int DEFAULT_ITERATIONS = 40;
     private static final int DEFAULT_THREAD_COUNT = 2;
+    private static final long TIMEOUT = TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
 
     private DynamicConnectionManager dcm;
     private CyclicBarrier barrier;
@@ -89,6 +90,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         barrier = new CyclicBarrier(remoteLids.length * threadCount);
 
         for (short remoteLid : remoteLids) {
+            statistics.registerRemote(remoteLid);
             for(int i = 0; i < threadCount; i++) {
                 executor.submit(new WorkloadExecutor(data, 0, remoteLid));
             }
@@ -96,7 +98,12 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         long expectedOperationCount = (long) threadCount * iterations * remoteLids.length;
 
+        var start = System.nanoTime();
+
         while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {
+            if(System.nanoTime() - start > TIMEOUT) {
+                break;
+            }
         }
 
         long bytes = statistics.getTotalRDMABytesWritten();

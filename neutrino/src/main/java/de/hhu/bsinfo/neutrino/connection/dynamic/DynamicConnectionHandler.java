@@ -211,12 +211,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void shutdown() {
-        close();
-        LOGGER.debug("Executor is shut down");
-    }
-
-    @Override
-    public void close() {
         udCompletionPoller.shutdown();
 
         boolean killed = false;
@@ -224,7 +218,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         while(!killed) {
             killed = udCompletionPoller.isKilled();
         }
+    }
 
+    @Override
+    public void close() {
         queuePair.close();
     }
 
