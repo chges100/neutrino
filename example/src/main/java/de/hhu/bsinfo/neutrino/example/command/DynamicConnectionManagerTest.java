@@ -26,8 +26,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final int DEFAULT_SERVER_PORT = 2998;
     private static final int DEFAULT_BUFFER_SIZE = 32*1024*1024;
     private static final int DEFAULT_DEVICE_ID = 0;
-    private static final int DEFAULT_ITERATIONS = 25;
-    private static final int DEFAULT_THREAD_COUNT = 8;
+    private static final int DEFAULT_ITERATIONS = 40;
+    private static final int DEFAULT_THREAD_COUNT = 2;
 
     private DynamicConnectionManager dcm;
     private CyclicBarrier barrier;

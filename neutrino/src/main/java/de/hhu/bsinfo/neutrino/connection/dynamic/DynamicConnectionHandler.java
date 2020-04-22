@@ -211,10 +211,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void shutdown() {
-
-        LOGGER.debug("Executor is shut down");
-
         close();
+        LOGGER.debug("Executor is shut down");
     }
 
     @Override

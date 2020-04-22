@@ -214,19 +214,20 @@ public class DynamicConnectionManager {
             }
         }
 
-        executor.shutdownNow();
-
-        try {
-            executor.awaitTermination(500, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            LOGGER.info("Thread Pool termination not yet finished - continue shutdown");
-        }
 
         rcCompletionPoller.shutdown();
         LOGGER.debug("RCCQPT is shut down");
 
         dch.shutdown();
         LOGGER.debug("DCH is shut down");
+
+        executor.shutdown();
+
+        try {
+            executor.awaitTermination(500, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            LOGGER.info("Thread Pool termination not yet finished - continue shutdown");
+        }
 
 
 
