@@ -5,6 +5,7 @@ import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.statistic.Statistic;
 import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.data.NativeString;
+import de.hhu.bsinfo.neutrino.example.util.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -71,8 +72,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         startTime = new AtomicLong(0);
         endTime = new AtomicLong(0);
 
-
-
         var data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
         data.clear();
 
@@ -82,9 +81,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         TimeUnit.SECONDS.sleep(2);
 
         var remoteLids = dcm.getRemoteLocalIds();
-        var workloads = new WorkloadExecutor[remoteLids.length];
-        //var executor  = (ThreadPoolExecutor) Executors.newFixedThreadPool(remoteLids.length * threadCount);
 
+        var workloads = new WorkloadExecutor[remoteLids.length];
         var executor = new PriorityScheduler(remoteLids.length * threadCount);
 
 
@@ -96,19 +94,32 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             }
         }
 
-        TimeUnit.SECONDS.sleep(4);
+        long expectedOperationCount = (long) threadCount * iterations * remoteLids.length;
+
+        while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {
+        }
+
+        long bytes = statistics.getTotalRDMABytesWritten();
+        long count = statistics.getTotalRDMAWriteCount();
+
+        endTime.set(System.nanoTime());
+
+        var time = endTime.get() - startTime.get();
+
+        var result = new Result(count, bytes, time, 0);
 
 
         try {
             executor.shutdown();
-            //executor.awaitTermination(500, TimeUnit.MILLISECONDS);
             executor.awaitTermination(500);
         } catch (Exception e) {
             LOGGER.info("Not all workload threads terminated");
         }
 
         dcm.shutdown();
+        data.close();
 
+        LOGGER.info(result.toString());
 
         return null;
 
@@ -132,7 +143,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             try {
                 barrier.await();
 
-                LOGGER.debug("START REMOTE WRITE ON {}", remoteLocalId);
+                LOGGER.info("START REMOTE WRITE ON {}", remoteLocalId);
 
                 startTime.compareAndSet(0, System.nanoTime());
 
@@ -140,17 +151,11 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
                     dcm.remoteWrite(data, offset, bufferSize, remoteBuffer, remoteLocalId);
                 }
 
-                var tmp = System.nanoTime();
-
                 LOGGER.info("FINISHED REMOTE WRITE ON {}", remoteLocalId);
-
-                endTime.updateAndGet(value -> value < tmp ? tmp : value);
 
             } catch (Exception e) {
                 LOGGER.error("Could not complete workload on {}", remoteLocalId);
             }
-
-            //data.close();
         }
     }
 }

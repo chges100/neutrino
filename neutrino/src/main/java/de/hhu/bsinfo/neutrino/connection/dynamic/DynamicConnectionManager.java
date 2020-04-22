@@ -34,7 +34,7 @@ public class DynamicConnectionManager {
     private static final long CREATE_CONNECTION_TIMEOUT = 100;
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
-    private static final int RC_COMPLETION_QUEUE_SIZE = 600;
+    private static final int RC_COMPLETION_QUEUE_SIZE = 1000;
     private static final int RC_QUEUE_PAIR_SIZE = 100;
 
     private final short localId;
@@ -165,6 +165,8 @@ public class DynamicConnectionManager {
 
         if(locked && !connectionTable.containsKey(remoteLocalId)) {
             try {
+                statisticManager.registerRemote(remoteLocalId);
+
                 var connection = new ReliableConnection(deviceContexts.get(0), RC_QUEUE_PAIR_SIZE, RC_QUEUE_PAIR_SIZE, completionQueue, completionQueue);
                 connection.init();
                 connectionTable.put(remoteLocalId, connection);

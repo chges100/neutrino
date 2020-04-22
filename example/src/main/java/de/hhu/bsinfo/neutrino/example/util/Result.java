@@ -30,6 +30,16 @@ public class Result {
         dataThroughput = (double) totalData / totalTime;
     }
 
+    public Result(long operationCount, long totalData, long timeNanos, int dummy) {
+        this.operationCount = operationCount;
+        this.totalData = totalData;
+        this.totalTime = timeNanos / 1000000000d;
+
+        this.operationSize = totalData / operationCount;
+        operationThroughput = (double) operationCount / totalTime;
+        dataThroughput = (double) totalData / totalTime;
+    }
+
     private String getFormattedValue(String name, double value, String unit) {
         double formattedValue = value;
 

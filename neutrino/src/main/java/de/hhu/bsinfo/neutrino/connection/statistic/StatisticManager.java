@@ -10,7 +10,7 @@ public class StatisticManager {
     }
 
     public void registerRemote(short remoteLocalId) {
-        statisticMap.put(remoteLocalId, new Statistic(remoteLocalId));
+        statisticMap.putIfAbsent(remoteLocalId, new Statistic(remoteLocalId));
     }
 
     public void putSendEvent(short remoteLocalId, long bytesSend) {
@@ -18,7 +18,7 @@ public class StatisticManager {
 
         if(statistic != null) {
             statistic.bytesSent.addAndGet(bytesSend);
-            statistic.sendCound.incrementAndGet();
+            statistic.sendCount.incrementAndGet();
         }
     }
 
@@ -57,5 +57,94 @@ public class StatisticManager {
         }
     }
 
+    public long getTotalRDMABytesWritten() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.rdmaBytesWritten.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalRDMABytesRead() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.rdmaBytesRead.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalBytesSent() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.bytesSent.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalBytesReceived() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.bytesReceived.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalSendCount() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.sendCount.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalReceiveCount() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.receiveCount.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalRDMAWriteCount() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.rdmaWriteCount.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalRDMAReadCount() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.rdmaReadCount.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalErrorCount() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.errorCount.get();
+        }
+
+        return ret;
+    }
 
 }
