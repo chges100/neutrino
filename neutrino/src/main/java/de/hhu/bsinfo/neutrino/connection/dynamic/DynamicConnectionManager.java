@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
@@ -34,7 +35,7 @@ public class DynamicConnectionManager {
     private static final long CREATE_CONNECTION_TIMEOUT = 100;
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
-    private static final int RC_COMPLETION_QUEUE_SIZE = 1000;
+    private static final int RC_COMPLETION_QUEUE_SIZE = 3000;
     private static final int RC_QUEUE_PAIR_SIZE = 500;
 
     private final short localId;
@@ -58,6 +59,8 @@ public class DynamicConnectionManager {
     protected final ThreadPoolExecutor executor;
 
     protected final long rdmaBufferSize;
+
+    private final AtomicLong executeCount = new AtomicLong(0);
 
     private UDInformationHandler udInformationHandler;
 
@@ -155,6 +158,8 @@ public class DynamicConnectionManager {
 
         connection.execute(data, opCode, offset, length, remoteBuffer.getAddress(), remoteBuffer.getRemoteKey(), 0);
 
+        executeCount.incrementAndGet();
+
         rwLocks.unlockRead(remoteLocalId);
 
     }
@@ -235,7 +240,9 @@ public class DynamicConnectionManager {
         dch.close();
         LOGGER.debug("DCH is closed");
 
-        printRemoteBufferInfos();
+        LOGGER.debug("Counting {} executed RDMA operations", executeCount.get());
+        LOGGER.debug("Completion queue size was {}", completionQueue.getMaxElements());
+
         printLocalBufferInfos();
     }
 
@@ -313,13 +320,14 @@ public class DynamicConnectionManager {
 
         @Override
         public void run() {
-            while (isRunning) {
-                var completionArray = new CompletionQueue.WorkCompletionArray(RC_COMPLETION_QUEUE_POLL_BATCH_SIZE);
+            var completionArray = new CompletionQueue.WorkCompletionArray(RC_COMPLETION_QUEUE_POLL_BATCH_SIZE);
+            var completionConsumer = new WorkCompletionConsumer(completionArray);
 
+            while (isRunning) {
                 completionQueue.poll(completionArray);
 
                 if(completionArray.getLength() > 0) {
-                    executor.execute(new WorkCompletionConsumer(completionArray));
+                    completionConsumer.consume();
                 }
 
             }
@@ -330,15 +338,14 @@ public class DynamicConnectionManager {
         }
     }
 
-    private final class WorkCompletionConsumer implements Runnable {
+    private final class WorkCompletionConsumer {
         private final CompletionQueue.WorkCompletionArray completionArray;
 
-        public WorkCompletionConsumer(CompletionQueue.WorkCompletionArray workCompletionArray) {
-            this.completionArray = workCompletionArray;
+        public WorkCompletionConsumer(CompletionQueue.WorkCompletionArray completionArray) {
+            this.completionArray = completionArray;
         }
 
-        @Override
-        public void run() {
+        public void consume() {
             for(int i = 0; i < completionArray.getLength(); i++) {
 
                 var completion = completionArray.get(i);
@@ -380,6 +387,9 @@ public class DynamicConnectionManager {
                     } else if (opCode == WorkCompletion.OpCode.RDMA_READ) {
 
                         statisticManager.putRDMAReadEvent(remoteLocalId, bytes);
+                    } else {
+
+                        statisticManager.putOtherOpEvent(remoteLocalId);
                     }
 
                 } else {

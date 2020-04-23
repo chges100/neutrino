@@ -49,6 +49,14 @@ public class StatisticManager {
         }
     }
 
+    public void putOtherOpEvent(short remoteLocalId) {
+        var statistic = statisticMap.get(remoteLocalId);
+
+        if(statistic != null) {
+            statistic.otherOpCount.incrementAndGet();
+        }
+    }
+
     public void putErrorEvent(short remoteLocalId) {
         var statistic = statisticMap.get(remoteLocalId);
 
@@ -132,6 +140,16 @@ public class StatisticManager {
 
         for(var statistic : statisticMap.values()) {
             ret += statistic.rdmaReadCount.get();
+        }
+
+        return ret;
+    }
+
+    public long getTotalOtherOpCount() {
+        long ret = 0;
+
+        for(var statistic : statisticMap.values()) {
+            ret += statistic.otherOpCount.get();
         }
 
         return ret;

@@ -17,6 +17,7 @@ public class Statistic {
     public final AtomicLong rdmaReadCount = new AtomicLong(0);
     public final AtomicLong sendCount = new AtomicLong(0);
     public final AtomicLong receiveCount = new AtomicLong(0);
+    public final AtomicLong otherOpCount = new AtomicLong(0);
     public final AtomicLong errorCount = new AtomicLong(0);
 
     public Statistic(short remoteLocalId) {
