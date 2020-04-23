@@ -5,6 +5,7 @@ import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.statistic.Statistic;
 import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.data.NativeString;
+import de.hhu.bsinfo.neutrino.example.util.DetectorThread;
 import de.hhu.bsinfo.neutrino.example.util.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     private AtomicLong startTime;
     private AtomicLong endTime;
+
+    private DetectorThread detectorThread;
 
     @CommandLine.Option(
             names = {"-p", "--port"},
@@ -72,6 +75,9 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         startTime = new AtomicLong(0);
         endTime = new AtomicLong(0);
+
+        //detectorThread = new DetectorThread(0);
+        //detectorThread.start();
 
         var data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
         data.clear();
