@@ -26,7 +26,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
-    private static final int DEFAULT_BUFFER_SIZE = 32*1024*1024;
+    private static final int DEFAULT_BUFFER_SIZE = 8*1024*1024;
     private static final int DEFAULT_DEVICE_ID = 0;
     private static final int DEFAULT_ITERATIONS = 40;
     private static final int DEFAULT_THREAD_COUNT = 2;
@@ -103,6 +103,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         }
 
         long expectedOperationCount = (long) threadCount * iterations * remoteLids.length;
+
+        TimeUnit.SECONDS.sleep(4);
 
         var start = System.nanoTime();
 

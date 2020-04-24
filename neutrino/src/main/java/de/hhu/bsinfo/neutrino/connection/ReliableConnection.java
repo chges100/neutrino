@@ -27,7 +27,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     private static final short INVALID_LID = Short.MAX_VALUE;
     private static final int BATCH_SIZE = 10;
     private static final long HANDSHAKE_CONNECT_TIMEOUT = 2000;
-    private static final long HANDSHAKE_DISCONNECT_TIMEOUT = 200;
+    private static final long HANDSHAKE_DISCONNECT_TIMEOUT = 10000;
     private static final int HANDSHAKE_POLL_QUEUE_TIMEOUT = 40;
     private static final int PRE_COMPLETION_BUFFER_POOL_SIZE = 2048;
 
@@ -340,7 +340,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
 
         if(!isTimeOut) {
-            LOGGER.trace("Handshake of connection {}  with message {} finished", getId(), msgType);
+            LOGGER.debug("Handshake of connection {}  with message {} finished", getId(), msgType);
         }
 
         message.close();
