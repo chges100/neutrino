@@ -50,10 +50,6 @@ installDist.doLast {
         from file("${project(':jni').buildDir}/lib/main/debug/libneutrino.so")
         into file("$project.buildDir/install/$applicationName/jni")
     }
-    project.copy {
-        from file("${project(':jni').buildDir}/lib/main/debug/libneutrino.so")
-        into file("$project.buildDir/install/$applicationName/jni")
-    }
 }
 
 repositories {
@@ -75,7 +71,6 @@ dependencies {
     implementation 'org.agrona:agrona:1.4.1'
     implementation 'org.threadly:threadly:6.1'
     implementation 'de.hhu.bsinfo:jdetector:0.1.0-SNAPSHOT'
-
 
     testImplementation 'com.greghaskins:spectrum:1.2.0'
     testImplementation 'org.assertj:assertj-core:3.12.2'

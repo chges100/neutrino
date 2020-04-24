@@ -76,8 +76,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         startTime = new AtomicLong(0);
         endTime = new AtomicLong(0);
 
-        //detectorThread = new DetectorThread(0);
-        //detectorThread.start();
+        detectorThread = new DetectorThread(0);
+        detectorThread.start();
 
         var data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
         data.clear();
