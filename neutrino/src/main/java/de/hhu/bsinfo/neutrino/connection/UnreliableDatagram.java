@@ -96,9 +96,11 @@ public class UnreliableDatagram extends QPSocket{
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, remoteInfo, wrIdProvider.getAndIncrement());
+        var wrId = wrIdProvider.getAndIncrement();
 
-        var wrId = postSend(sendWorkRequest);
+        var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, remoteInfo, wrId);
+
+        postSend(sendWorkRequest);
 
         sendWorkRequest.releaseInstance();
         scatterGatherElement.releaseInstance();
@@ -123,9 +125,11 @@ public class UnreliableDatagram extends QPSocket{
         scatterGatherElement.setLength((int) length);
         scatterGatherElement.setLocalKey(data.getLocalKey());
 
-        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, wrIdProvider.getAndIncrement());
+        var wrId = wrIdProvider.getAndIncrement();
 
-        var wrId = postReceive(receiveWorkRequest);
+        var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, wrId);
+
+        postReceive(receiveWorkRequest);
 
         receiveWorkRequest.releaseInstance();
         scatterGatherElement.releaseInstance();

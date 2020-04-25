@@ -25,6 +25,9 @@ public abstract class QPSocket {
 
     protected QueuePair queuePair;
 
+    private final AtomicInteger sendQueueFillCount = new AtomicInteger(0);
+    private final AtomicInteger receiveQueueFillCount = new AtomicInteger(0);
+
     protected QPSocket(DeviceContext deviceContext) throws IOException {
 
         this.deviceContext = deviceContext;
@@ -90,16 +93,46 @@ public abstract class QPSocket {
     abstract void init() throws IOException;
     abstract void close() throws IOException;
 
-    protected long postSend(SendWorkRequest workRequest) {
-        queuePair.postSend(workRequest);
+    protected void postSend(SendWorkRequest workRequest) {
+        boolean posted = false;
 
-        return workRequest.getId();
+        while (!posted) {
+            posted = tryPostSend(workRequest);
+        }
     }
 
-    protected long postReceive(ReceiveWorkRequest workRequest) {
-        queuePair.postReceive(workRequest);
+    protected void postReceive(ReceiveWorkRequest workRequest) {
+        boolean posted = false;
 
-        return workRequest.getId();
+        while (!posted) {
+            posted = tryPostReceive(workRequest);
+        }
+    }
+
+    protected boolean tryPostSend(SendWorkRequest workRequest) {
+        int oldVal = sendQueueFillCount.get();
+
+        if(oldVal < sendQueueSize) {
+            int newVal = oldVal + 1;
+            if(sendQueueFillCount.compareAndSet(oldVal, newVal)) {
+                return queuePair.postSend(workRequest);
+            }
+        }
+
+        return false;
+    }
+
+    protected boolean tryPostReceive(ReceiveWorkRequest workRequest) {
+        int oldVal = receiveQueueFillCount.get();
+
+        if(oldVal < receiveQueueSize) {
+            int newVal = oldVal + 1;
+            if(receiveQueueFillCount.compareAndSet(oldVal, newVal)) {
+                return queuePair.postReceive(workRequest);
+            }
+        }
+
+        return false;
     }
 
     public DeviceContext getDeviceContext() {
@@ -112,5 +145,21 @@ public abstract class QPSocket {
 
     public QueuePair getQueuePair() {
         return queuePair;
+    }
+
+    public void acknowledgeSendCompletion() {
+        sendQueueFillCount.decrementAndGet();
+    }
+
+    public void acknowledgeReceiveCompletion() {
+        receiveQueueFillCount.decrementAndGet();
+    }
+
+    public int getSendQueueSize() {
+        return sendQueueSize;
+    }
+
+    public int getReceiveQueueSize() {
+        return receiveQueueSize;
     }
 }

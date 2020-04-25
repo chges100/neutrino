@@ -36,7 +36,7 @@ public class DynamicConnectionManager {
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
     private static final int RC_COMPLETION_QUEUE_SIZE = 3000;
-    private static final int RC_QUEUE_PAIR_SIZE = 500;
+    private static final int RC_QUEUE_PAIR_SIZE = 100;
 
     private final short localId;
 
@@ -48,7 +48,6 @@ public class DynamicConnectionManager {
     protected final CompletionQueue completionQueue;
 
     protected final NonBlockingHashMapLong<ReliableConnection> connectionTable = new NonBlockingHashMapLong<>();;
-    protected final NonBlockingHashMapLong<ReliableConnection> qpToConnection = new NonBlockingHashMapLong<>();;
 
     protected RemoteBufferHandler remoteBufferHandler;
     protected LocalBufferHandler localBufferHandler;
@@ -165,7 +164,6 @@ public class DynamicConnectionManager {
                 var connection = new ReliableConnection(deviceContexts.get(0), RC_QUEUE_PAIR_SIZE, RC_QUEUE_PAIR_SIZE, completionQueue, completionQueue);
                 connection.init();
                 connectionTable.put(remoteLocalId, connection);
-                qpToConnection.put(connection.getQueuePair().getQueuePairNumber(), connection);
 
                 var localQP = new RCInformation(connection);
                 dch.initConnectionRequest(localQP, remoteLocalId);
@@ -346,20 +344,23 @@ public class DynamicConnectionManager {
                 var status = completion.getStatus();
 
                 var workRequestMapElement = ReliableConnection.fetchWorkRequestDataData(wrId);
-                var connection = qpToConnection.get(qpNumber);
+                var connection = workRequestMapElement.connection;
 
                 var remoteLocalId = workRequestMapElement.remoteLocalId;
                 var bytes = workRequestMapElement.scatterGatherElement.getLength();
                 var byteCount = completion.getByteCount();
 
                 if(opCode.getValue() < 128) {
+                    connection.acknowledgeSendCompletion();
                     workRequestMapElement.sendWorkRequest.releaseInstance();
                 } else {
+                    connection.acknowledgeReceiveCompletion();
                     workRequestMapElement.receiveWorkRequest.releaseInstance();
                 }
 
                 workRequestMapElement.scatterGatherElement.releaseInstance();
                 workRequestMapElement.releaseInstance();
+
 
                 if(status == WorkCompletion.Status.SUCCESS) {
                     if(opCode == WorkCompletion.OpCode.SEND) {

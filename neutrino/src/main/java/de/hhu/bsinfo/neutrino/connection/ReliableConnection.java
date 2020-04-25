@@ -46,9 +46,6 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
     private final RCHandshakeQueue handshakeQueue;
 
-    private final AtomicLong sendQueueFillCount = new AtomicLong(0);
-    private final AtomicLong receiveQueueFillCount = new AtomicLong(0);
-
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
         super(deviceContext);
@@ -168,7 +165,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         var wrId = wrIdProvider.getAndIncrement();
         var sendWorkRequest = buildSendWorkRequest(scatterGatherElement, wrId);
 
-        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setSendWorkRequest(sendWorkRequest).setScatterGatherElement(scatterGatherElement));
+        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setConnection(this).setSendWorkRequest(sendWorkRequest).setScatterGatherElement(scatterGatherElement));
 
         postSend(sendWorkRequest);
 
@@ -196,7 +193,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         var wrId = wrIdProvider.getAndIncrement();
         var sendWorkRequest = buildRDMAWorkRequest(opCode, scatterGatherElement, remoteAddress + remoteOffset, remoteKey, wrId);
 
-        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setSendWorkRequest(sendWorkRequest).setScatterGatherElement(scatterGatherElement));
+        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setConnection(this).setSendWorkRequest(sendWorkRequest).setScatterGatherElement(scatterGatherElement));
 
         postSend(sendWorkRequest);
 
@@ -228,7 +225,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         var wrId = wrIdProvider.getAndIncrement();
         var receiveWorkRequest = buildReceiveWorkRequest(scatterGatherElement, wrId);
 
-        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setReceiveWorkRequest(receiveWorkRequest).setScatterGatherElement(scatterGatherElement));
+        workRequestMap.put(wrId, workRequestMapElementPool.getInstance().setRemoteLocalId((short) remoteLid.get()).setConnection(this).setReceiveWorkRequest(receiveWorkRequest).setScatterGatherElement(scatterGatherElement));
 
         postReceive(receiveWorkRequest);
 
@@ -457,6 +454,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         public SendWorkRequest sendWorkRequest;
         public ReceiveWorkRequest receiveWorkRequest;
         public ScatterGatherElement scatterGatherElement;
+        public ReliableConnection connection;
         public short remoteLocalId;
 
         WorkRequestMapElement() {}
@@ -484,12 +482,18 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
             return this;
         }
+        public WorkRequestMapElement setConnection(ReliableConnection connection) {
+            this.connection = connection;
+
+            return this;
+        }
 
         @Override
         public void releaseInstance() {
             sendWorkRequest = null;
             receiveWorkRequest = null;
             scatterGatherElement = null;
+            connection = null;
             remoteLocalId = 0;
 
             workRequestMapElementPool.returnInstance(this);
