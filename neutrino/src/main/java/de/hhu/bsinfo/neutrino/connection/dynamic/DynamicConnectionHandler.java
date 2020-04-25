@@ -34,11 +34,11 @@ import java.util.concurrent.locks.LockSupport;
 public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionHandler.class);
 
-    private static final int MAX_SEND_WORK_REQUESTS = 500;
-    private static final int MAX_RECEIVE_WORK_REQUESTS = 500;
+    private static final int MAX_SEND_WORK_REQUESTS = 200;
+    private static final int MAX_RECEIVE_WORK_REQUESTS = 200;
 
-    private static final int SEND_COMPLETION_QUEUE_SIZE = 1000;
-    private static final int RECEIVE_COMPLETION_QUEUE_SIZE = 1000;
+    private static final int SEND_COMPLETION_QUEUE_SIZE = 250;
+    private static final int RECEIVE_COMPLETION_QUEUE_SIZE = 250;
 
     private static final long RESP_CONNECTION_REQ_TIMEOUT_MS = 200;
     private static final long RESP_BUFFER_ACK_TIMEOUT_MS = 200;
@@ -53,8 +53,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
 
     private final UDInformation localUDInformation;
-
-    private final AtomicInteger receiveQueueFillCount = new AtomicInteger(0);
 
     private final SendWorkRequest[] sendWorkRequests = new SendWorkRequest[MAX_SEND_WORK_REQUESTS];
     private final ReceiveWorkRequest[] receiveWorkRequests = new ReceiveWorkRequest[MAX_RECEIVE_WORK_REQUESTS];
@@ -73,7 +71,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
     protected DynamicConnectionHandler(DynamicConnectionManager dcm, DeviceContext deviceContext, int maxLid) throws IOException {
 
-        super(deviceContext);
+        super(deviceContext, MAX_SEND_WORK_REQUESTS, MAX_RECEIVE_WORK_REQUESTS, SEND_COMPLETION_QUEUE_SIZE, RECEIVE_COMPLETION_QUEUE_SIZE);
 
         this.dcm = dcm;
 
@@ -81,8 +79,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         registeredHandlerTable = new RegisteredHandlerTable(maxLid);
 
-        sendSGEProvider = new SGEProvider(getDeviceContext(), MAX_SEND_WORK_REQUESTS, Message.getSize());
-        receiveSGEProvider = new SGEProvider(getDeviceContext(), MAX_RECEIVE_WORK_REQUESTS, Message.getSize() + UD_Receive_Offset);
+        sendSGEProvider = new SGEProvider(getDeviceContext(), 2 * MAX_SEND_WORK_REQUESTS, Message.getSize());
+        receiveSGEProvider = new SGEProvider(getDeviceContext(), 2 * MAX_RECEIVE_WORK_REQUESTS, Message.getSize() + UD_Receive_Offset);
 
         init();
 
@@ -217,16 +215,16 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         private boolean isRunning = true;
         private boolean killed = false;
-        private final int batchSize = 10;
+        private final int batchSize = 20;
 
         @Override
         public void run() {
 
-            LOGGER.info("Fill up receive queue of dynamic connection handler");
+            LOGGER.trace("Fill up receive queue of dynamic connection handler");
             // initial fill up receive queue
-            while (receiveQueueFillCount.get() < receiveQueueSize) {
+            // we have to check fill count to prevent that Receive-WRs in array get overwritten
+            while (receiveQueueFillCount.get() < MAX_RECEIVE_WORK_REQUESTS) {
                 receiveMessage();
-                receiveQueueFillCount.incrementAndGet();
             }
 
             while(isRunning) {
@@ -236,6 +234,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 for(int i = 0; i < workCompletions.getLength(); i++) {
                     var completion = workCompletions.get(i);
 
+                    acknowledgeSendCompletion();
+
                     if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
                         LOGGER.error("Work completion failes with error [{}]: {}", completion.getStatus(), completion.getStatusMessage());
                     }
@@ -244,6 +244,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     sendSGEProvider.returnSGE(sge);
 
                     sendWorkRequests[(int) completion.getId()].releaseInstance();
+                    sendWorkRequests[(int) completion.getId()] = null;
                 }
 
                 workCompletions = pollReceiveCompletions(batchSize);
@@ -251,11 +252,11 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 for(int i = 0; i < workCompletions.getLength(); i++) {
                     var completion = workCompletions.get(i);
 
+                    acknowledgeReceiveCompletion();
+
                     if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
                         LOGGER.error("Work completion failes with error [{}]: {}", completion.getStatus(), completion.getStatusMessage());
                     }
-
-                    receiveQueueFillCount.decrementAndGet();
 
                     var sge = (ScatterGatherElement) NativeObjectRegistry.getObject(receiveWorkRequests[(int) completion.getId()].getListHandle());
 
@@ -264,18 +265,18 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     try {
                         dcm.executor.execute(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
                     } catch (RejectedExecutionException e) {
-                        LOGGER.error("executeting task failed with exception: {}", e);
+                        LOGGER.error("Executing task failed with exception: {}", e);
                     }
 
                     receiveSGEProvider.returnSGE(sge);
 
                     receiveWorkRequests[(int) completion.getId()].releaseInstance();
+                    receiveWorkRequests[(int) completion.getId()] = null;
                 }
 
                 // Fill up receive queue of dch
-                while (receiveQueueFillCount.get() < receiveQueueSize) {
+                while (receiveQueueFillCount.get() < MAX_RECEIVE_WORK_REQUESTS) {
                     receiveMessage();
-                    receiveQueueFillCount.incrementAndGet();
                 }
             }
 

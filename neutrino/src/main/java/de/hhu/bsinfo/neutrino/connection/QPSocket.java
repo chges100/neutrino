@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class QPSocket {
     private static final Logger LOGGER = LoggerFactory.getLogger(QPSocket.class);
@@ -25,8 +24,8 @@ public abstract class QPSocket {
 
     protected QueuePair queuePair;
 
-    private final AtomicInteger sendQueueFillCount = new AtomicInteger(0);
-    private final AtomicInteger receiveQueueFillCount = new AtomicInteger(0);
+    protected final AtomicInteger sendQueueFillCount = new AtomicInteger(0);
+    protected final AtomicInteger receiveQueueFillCount = new AtomicInteger(0);
 
     protected QPSocket(DeviceContext deviceContext) throws IOException {
 

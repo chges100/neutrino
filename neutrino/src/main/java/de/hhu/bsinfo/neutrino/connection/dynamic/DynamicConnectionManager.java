@@ -59,8 +59,6 @@ public class DynamicConnectionManager {
 
     protected final long rdmaBufferSize;
 
-    private final AtomicLong executeCount = new AtomicLong(0);
-
     private UDInformationHandler udInformationHandler;
 
     private final RCCompletionQueuePollThread rcCompletionPoller;
@@ -147,8 +145,6 @@ public class DynamicConnectionManager {
 
         connection.execute(data, opCode, offset, length, remoteBuffer.getAddress(), remoteBuffer.getRemoteKey(), 0);
 
-        executeCount.incrementAndGet();
-
         rwLocks.unlockRead(remoteLocalId);
 
     }
@@ -228,7 +224,6 @@ public class DynamicConnectionManager {
         dch.close();
         LOGGER.debug("DCH is closed");
 
-        LOGGER.debug("Counting {} executed RDMA operations", executeCount.get());
         LOGGER.debug("Completion queue size was {}", completionQueue.getMaxElements());
 
         printLocalBufferInfos();

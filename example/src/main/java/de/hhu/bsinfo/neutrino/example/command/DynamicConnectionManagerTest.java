@@ -2,10 +2,8 @@ package de.hhu.bsinfo.neutrino.example.command;
 
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
-import de.hhu.bsinfo.neutrino.connection.statistic.Statistic;
 import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.data.NativeString;
-import de.hhu.bsinfo.neutrino.example.util.DetectorThread;
 import de.hhu.bsinfo.neutrino.example.util.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +24,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
-    private static final int DEFAULT_BUFFER_SIZE = 8*1024*1024;
+    private static final int DEFAULT_BUFFER_SIZE = 2*1024*1024;
     private static final int DEFAULT_DEVICE_ID = 0;
     private static final int DEFAULT_ITERATIONS = 40;
     private static final int DEFAULT_THREAD_COUNT = 2;
@@ -37,8 +35,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     private AtomicLong startTime;
     private AtomicLong endTime;
-
-    private DetectorThread detectorThread;
 
     @CommandLine.Option(
             names = {"-p", "--port"},
@@ -75,9 +71,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         startTime = new AtomicLong(0);
         endTime = new AtomicLong(0);
-
-        detectorThread = new DetectorThread(0);
-        detectorThread.start();
 
         var data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
         data.clear();
