@@ -183,7 +183,7 @@ public class DynamicConnectionManager {
         return remoteBufferHandler.getBufferInfo(remoteLocalId);
     }
 
-    public void shutdown() {
+    public void shutdown() throws InterruptedException {
         LOGGER.debug("Shutdown dynamic connection manager");
 
         rcDisconnector.shutdown();
@@ -199,8 +199,10 @@ public class DynamicConnectionManager {
             if(kv.getValue().isConnected()) {
                 var remoteLid = kv.getValue().getRemoteLocalId();
 
-                if(kv.getValue().isConnected()) {
-                    dch.initDisconnectForce(localId, remoteLid);
+                while(kv.getValue().isConnected()) {
+                    dch.initDisconnectRequest(localId, remoteLid);
+
+                    TimeUnit.MILLISECONDS.sleep(500);
                 }
             }
         }

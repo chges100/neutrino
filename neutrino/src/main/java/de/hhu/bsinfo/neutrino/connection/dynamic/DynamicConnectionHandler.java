@@ -136,6 +136,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         LOGGER.trace("Send disconnect request to {}", remoteLocalId);
     }
 
+    // handle with care - can have side effects!!
     protected void initDisconnectForce(short localId, short remoteLocalId) {
         dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_SEND_DISCONNECT_FORCE, remoteLocalId, localId));
         LOGGER.trace("Send disconnect force to {}", remoteLocalId);
