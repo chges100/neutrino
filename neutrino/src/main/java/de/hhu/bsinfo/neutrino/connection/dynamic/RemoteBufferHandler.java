@@ -6,14 +6,12 @@ import org.agrona.collections.Int2ObjectHashMap;
 
 public class RemoteBufferHandler {
 
-    private final Int2ObjectHashMap<BufferInformation> remoteBuffers;
+    private final Int2ObjectHashMap<BufferInformation> remoteBuffers = new Int2ObjectHashMap<>();
 
     private final DynamicConnectionManager dcm;
 
     protected RemoteBufferHandler(DynamicConnectionManager dcm) {
         this.dcm = dcm;
-
-        remoteBuffers = new Int2ObjectHashMap<>();
     }
 
     protected BufferInformation getBufferInfo(int remoteLocalId) {

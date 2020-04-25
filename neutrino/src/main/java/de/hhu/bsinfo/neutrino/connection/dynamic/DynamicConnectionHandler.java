@@ -48,22 +48,22 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final int RING_BUFF_POOL_SIZE = 100;
 
     private final DynamicConnectionManager dcm;
-    private final Int2ObjectHashMap<UDInformation> remoteHandlerTables;
+    private final Int2ObjectHashMap<UDInformation> remoteHandlerTables = new Int2ObjectHashMap<>();
     private final RegisteredHandlerTable registeredHandlerTable;
 
 
     private final UDInformation localUDInformation;
 
-    private final AtomicInteger receiveQueueFillCount;
+    private final AtomicInteger receiveQueueFillCount = new AtomicInteger(0);
 
-    private final SendWorkRequest[] sendWorkRequests;
-    private final ReceiveWorkRequest[] receiveWorkRequests;
+    private final SendWorkRequest[] sendWorkRequests = new SendWorkRequest[MAX_SEND_WORK_REQUESTS];
+    private final ReceiveWorkRequest[] receiveWorkRequests = new ReceiveWorkRequest[MAX_RECEIVE_WORK_REQUESTS];
 
-    private final AtomicInteger ownSendWrIdProvider;
-    private final AtomicInteger ownReceiveWrIdProvider;
+    private final AtomicInteger ownSendWrIdProvider = new AtomicInteger(0);
+    private final AtomicInteger ownReceiveWrIdProvider = new AtomicInteger(0);
 
-    private final NonBlockingHashMapLong<StatusObject> callbackMap;
-    private final ConcurrentRingBufferPool<StatusObject> statusObjectPool;
+    private final NonBlockingHashMapLong<StatusObject> callbackMap = new NonBlockingHashMapLong<>();
+    private final ConcurrentRingBufferPool<StatusObject> statusObjectPool = new ConcurrentRingBufferPool<>(RING_BUFF_POOL_SIZE, StatusObject::new);
 
 
     private final SGEProvider sendSGEProvider;
@@ -79,19 +79,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         LOGGER.info("Set up dynamic connection handler");
 
-        remoteHandlerTables = new Int2ObjectHashMap<>();
         registeredHandlerTable = new RegisteredHandlerTable(maxLid);
-
-        ownSendWrIdProvider = new AtomicInteger(0);
-        ownReceiveWrIdProvider = new AtomicInteger(0);
-
-        receiveQueueFillCount = new AtomicInteger(0);
-
-        callbackMap = new NonBlockingHashMapLong<>();
-        statusObjectPool = new ConcurrentRingBufferPool<>(RING_BUFF_POOL_SIZE, StatusObject::new);
-
-        sendWorkRequests = new SendWorkRequest[MAX_SEND_WORK_REQUESTS];
-        receiveWorkRequests = new ReceiveWorkRequest[MAX_RECEIVE_WORK_REQUESTS];
 
         sendSGEProvider = new SGEProvider(getDeviceContext(), MAX_SEND_WORK_REQUESTS, Message.getSize());
         receiveSGEProvider = new SGEProvider(getDeviceContext(), MAX_RECEIVE_WORK_REQUESTS, Message.getSize() + UD_Receive_Offset);

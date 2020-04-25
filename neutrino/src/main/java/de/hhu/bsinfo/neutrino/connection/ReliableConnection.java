@@ -31,6 +31,13 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     private static final int HANDSHAKE_POLL_QUEUE_TIMEOUT = 40;
     private static final int PRE_COMPLETION_BUFFER_POOL_SIZE = 2048;
 
+    private static final AtomicInteger connectionIdCounter = new AtomicInteger(0);
+
+    protected static final AtomicLong wrIdProvider = new AtomicLong(0);
+
+    private static final NonBlockingHashMapLong<WorkRequestMapElement> workRequestMap = new NonBlockingHashMapLong<>();
+    private static final ConcurrentRingBufferPool<WorkRequestMapElement> workRequestMapElementPool = new ConcurrentRingBufferPool<WorkRequestMapElement>(PRE_COMPLETION_BUFFER_POOL_SIZE, WorkRequestMapElement::new);
+
     private final int id;
     private AtomicInteger remoteLid = new AtomicInteger(INVALID_LID);
 
@@ -39,12 +46,8 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
     private final RCHandshakeQueue handshakeQueue;
 
-    private static final AtomicInteger connectionIdCounter = new AtomicInteger(0);
-
-    protected static final AtomicLong wrIdProvider = new AtomicLong(0);
-
-    private static final NonBlockingHashMapLong<WorkRequestMapElement> workRequestMap = new NonBlockingHashMapLong<>();
-    private static final ConcurrentRingBufferPool<WorkRequestMapElement> workRequestMapElementPool = new ConcurrentRingBufferPool<WorkRequestMapElement>(PRE_COMPLETION_BUFFER_POOL_SIZE, WorkRequestMapElement::new);
+    private final AtomicLong sendQueueFillCount = new AtomicLong(0);
+    private final AtomicLong receiveQueueFillCount = new AtomicLong(0);
 
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 

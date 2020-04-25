@@ -3,11 +3,7 @@ package de.hhu.bsinfo.neutrino.connection.statistic;
 import org.jctools.maps.NonBlockingHashMapLong;
 
 public class StatisticManager {
-    private NonBlockingHashMapLong<Statistic> statisticMap;
-
-    public StatisticManager() {
-        statisticMap = new NonBlockingHashMapLong<>();
-    }
+    private NonBlockingHashMapLong<Statistic> statisticMap = new NonBlockingHashMapLong<>();
 
     public void registerRemote(short remoteLocalId) {
         statisticMap.putIfAbsent(remoteLocalId, new Statistic(remoteLocalId));

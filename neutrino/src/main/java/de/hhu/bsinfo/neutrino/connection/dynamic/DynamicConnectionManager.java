@@ -40,23 +40,23 @@ public class DynamicConnectionManager {
 
     private final short localId;
 
-    private final ArrayList<DeviceContext> deviceContexts;
+    private final ArrayList<DeviceContext> deviceContexts = new ArrayList<>();
 
     protected DynamicConnectionHandler dch;
 
 
     protected final CompletionQueue completionQueue;
 
-    protected final NonBlockingHashMapLong<ReliableConnection> connectionTable;
-    protected final NonBlockingHashMapLong<ReliableConnection> qpToConnection;
+    protected final NonBlockingHashMapLong<ReliableConnection> connectionTable = new NonBlockingHashMapLong<>();;
+    protected final NonBlockingHashMapLong<ReliableConnection> qpToConnection = new NonBlockingHashMapLong<>();;
 
     protected RemoteBufferHandler remoteBufferHandler;
     protected LocalBufferHandler localBufferHandler;
 
-    protected final AtomicReadWriteLockArray rwLocks;
-    protected final RCUsageTable rcUsageTable;
+    protected final AtomicReadWriteLockArray rwLocks = new AtomicReadWriteLockArray(INVALID_LID);
+    protected final RCUsageTable rcUsageTable = new RCUsageTable(INVALID_LID);;
 
-    protected final ThreadPoolExecutor executor;
+    protected final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();;
 
     protected final long rdmaBufferSize;
 
@@ -73,19 +73,9 @@ public class DynamicConnectionManager {
 
     public DynamicConnectionManager(int port, long rdmaBufferSize, StatisticManager statisticManager) throws IOException {
 
-        deviceContexts = new ArrayList<>();
-
         this.rdmaBufferSize = rdmaBufferSize;
 
-        connectionTable = new NonBlockingHashMapLong<>();
-        qpToConnection = new NonBlockingHashMapLong<>();
-
         this.statisticManager = statisticManager;
-        executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
-
-
-        rwLocks = new AtomicReadWriteLockArray(INVALID_LID);
-        rcUsageTable = new RCUsageTable(INVALID_LID);
 
         var deviceCnt = Context.getDeviceCount();
 
