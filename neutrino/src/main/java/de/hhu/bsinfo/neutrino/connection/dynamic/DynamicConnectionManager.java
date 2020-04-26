@@ -186,8 +186,7 @@ public class DynamicConnectionManager {
     public void shutdown() throws InterruptedException {
         LOGGER.debug("Shutdown dynamic connection manager");
 
-        rcDisconnector.shutdown();
-        LOGGER.debug("RCDisconnector is shut down");
+
 
         udInformationHandler.shutdown();
         LOGGER.debug("UDInformationHandler is shut down");
@@ -195,17 +194,19 @@ public class DynamicConnectionManager {
         LOGGER.debug("Begin disconnecting all existing connections");
 
         while(!connectionTable.isEmpty()) {
-            for(var entry : connectionTable.entrySet()) {
+            /*for(var entry : connectionTable.entrySet()) {
                 var remoteLocalId = entry.getKey();
                 var connection = entry.getValue();
 
                 if(connection.isConnected()) {
                     dch.initDisconnectRequest(localId, (short) (long) remoteLocalId);
                 }
-            }
-
+            }*/
             TimeUnit.SECONDS.sleep(1);
         }
+
+        rcDisconnector.shutdown();
+        LOGGER.debug("RCDisconnector is shut down");
 
 
         rcCompletionPoller.shutdown();

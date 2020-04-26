@@ -107,10 +107,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             }*/
         }
 
+        endTime.set(System.nanoTime());
+
         long bytes = statistics.getTotalRDMABytesWritten();
         long count = statistics.getTotalRDMAWriteCount();
-
-        endTime.set(System.nanoTime());
 
         var time = endTime.get() - startTime.get();
 

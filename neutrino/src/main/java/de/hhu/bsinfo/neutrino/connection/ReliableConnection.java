@@ -618,10 +618,10 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         return !isTimeOut;
     }
 
-    @Override
     /**
      * Disconnects from remote queue pair and transforms into init state.
-     */
+     **/
+    @Override
     public void disconnect() throws IOException{
 
         // either another thread is alreading disconnecting this connection or it is in unconnected state
@@ -647,6 +647,10 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         LOGGER.debug("Disconnected connection {}", id);
     }
 
+
+    /**
+     * Closes the queue pair.
+     */
     @Override
     public void close() throws IOException {
         reset();

@@ -98,6 +98,14 @@ public class AtomicReadWriteLockArray {
         }
     }
 
+    public boolean isWriteLocked(int i) {
+        return array.get(i) < 0;
+    }
+
+    public boolean isReadLocked(int i) {
+        return array.get(i) > 0;
+    }
+
     public class IllegalReadWriteLockState extends  RuntimeException {
 
         public IllegalReadWriteLockState(String message) {
