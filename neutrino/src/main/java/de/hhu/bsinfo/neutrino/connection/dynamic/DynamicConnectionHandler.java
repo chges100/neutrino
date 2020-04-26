@@ -2,6 +2,7 @@ package de.hhu.bsinfo.neutrino.connection.dynamic;
 
 import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.buffer.LocalBuffer;
+import de.hhu.bsinfo.neutrino.buffer.RemoteBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.LocalMessage;
@@ -27,9 +28,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.locks.ReentrantLock;
 
 public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionHandler.class);
@@ -45,7 +49,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final long RESP_DISCONNECT_REQ_TIMEOUT_MS = 200;
     private static final long RESP_DISCONNECT_FORCE_RESP_TIMEOUT_MS = 400;
 
-    private static final int RING_BUFF_POOL_SIZE = 100;
+    private static final int RING_BUFF_POOL_SIZE = 50;
 
     private final DynamicConnectionManager dcm;
     private final Int2ObjectHashMap<UDInformation> remoteHandlerTables = new Int2ObjectHashMap<>();
@@ -60,8 +64,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private final AtomicInteger ownSendWrIdProvider = new AtomicInteger(0);
     private final AtomicInteger ownReceiveWrIdProvider = new AtomicInteger(0);
 
-    private final NonBlockingHashMapLong<StatusObject> callbackMap = new NonBlockingHashMapLong<>();
-    private final ConcurrentRingBufferPool<StatusObject> statusObjectPool = new ConcurrentRingBufferPool<>(RING_BUFF_POOL_SIZE, StatusObject::new);
+    private final NonBlockingHashMapLong<RemoteStatus> remoteStatusMap = new NonBlockingHashMapLong<>();
+    private final ConcurrentRingBufferPool<RemoteStatus> statusObjectPool = new ConcurrentRingBufferPool<>(RING_BUFF_POOL_SIZE, RemoteStatus::new);
 
 
     private final SGEProvider sendSGEProvider;
@@ -636,54 +640,26 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
     }
 
-    private class StatusObject implements Poolable {
+    private class RemoteStatus implements Poolable {
         public static final int STATELESS = 0;
         public static final int BUFFER_ACK = 1;
         public static final int DISCONNECT_ACCEPT = 2;
         public static final int DISCONNECT_REJECT = 3;
         public static final int CONNECTION_REQ = 4;
 
-        private AtomicInteger status = new AtomicInteger(0);
+        public final ReentrantLock lock = new ReentrantLock();
 
-        private void setStatus(int status) {
-            this.status.set(status);
-        }
+        public final Condition connect = lock.newCondition();
+        public final Condition disconnect = lock.newCondition();
+        public final Condition buffer = lock.newCondition();
 
-        public void setStateless() {
-            setStatus(STATELESS);
-        }
+        public final AtomicBoolean disconnectAck = new AtomicBoolean(false);
+        public final AtomicBoolean connectAck = new AtomicBoolean(false);
+        public final AtomicBoolean bufferAck = new AtomicBoolean(false);
 
-        public synchronized void setBufferAckAndNotify() {
-            setStatus(BUFFER_ACK);
-
-            notifyAll();
-        }
-
-        public synchronized void setDisconnectAcceptAndNotify() {
-            setStatus(DISCONNECT_ACCEPT);
-
-            notifyAll();
-        }
-
-        public synchronized void setDisconnectRejectAndNotify() {
-            setStatus(DISCONNECT_REJECT);
-
-            notifyAll();
-        }
-
-        public synchronized void setConnectionReqAndNotify() {
-            setStatus(CONNECTION_REQ);
-
-            notifyAll();
-        }
-
-        public int getStatus() {
-            return status.get();
-        }
-
-        public synchronized void waitForResponse(long timeout) {
+        public void waitForResponse(Condition condition, long timeoutMs) {
             try {
-                wait(timeout);
+                condition.await(timeoutMs, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -691,7 +667,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         @Override
         public synchronized void releaseInstance() {
-            status.set(0);
+            connectAck.set(false);
+            disconnectAck.set(false);
+            bufferAck.set(false);
+
             statusObjectPool.returnInstance(this);
         }
     }
