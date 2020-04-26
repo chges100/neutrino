@@ -102,9 +102,9 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var start = System.nanoTime();
 
         while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {
-            if(System.nanoTime() - start > TIMEOUT) {
+            /*if(System.nanoTime() - start > TIMEOUT) {
                 break;
-            }
+            }*/
         }
 
         long bytes = statistics.getTotalRDMABytesWritten();

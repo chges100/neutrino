@@ -194,17 +194,17 @@ public class DynamicConnectionManager {
 
         LOGGER.debug("Begin disconnecting all existing connections");
 
-        for(var kv : connectionTable.entrySet()) {
+        while(!connectionTable.isEmpty()) {
+            for(var entry : connectionTable.entrySet()) {
+                var remoteLocalId = entry.getKey();
+                var connection = entry.getValue();
 
-            if(kv.getValue().isConnected()) {
-                var remoteLid = kv.getValue().getRemoteLocalId();
-
-                while(kv.getValue().isConnected()) {
-                    dch.initDisconnectRequest(localId, remoteLid);
-
-                    TimeUnit.MILLISECONDS.sleep(500);
+                if(connection.isConnected()) {
+                    dch.initDisconnectRequest(localId, (short) (long) remoteLocalId);
                 }
             }
+
+            TimeUnit.SECONDS.sleep(1);
         }
 
 

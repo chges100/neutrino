@@ -409,6 +409,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                         connection.close();
 
                         dcm.connectionTable.remove(remoteLid);
+                        LOGGER.debug("DISCONNECTED from {}", remoteLid);
                     } catch (IOException e) {
                         LOGGER.info("Disconnecting of connection {} failed: {}", connection.getId(), e);
                     }
@@ -567,6 +568,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
 
             if(locked) {
+                LOGGER.debug("TRY DISCONNECT");
                 var msgId = Message.provideGlobalId();
 
                 var statusObject = statusObjectPool.getInstance();
@@ -585,6 +587,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                             connection.close();
 
                             dcm.connectionTable.remove(remoteLocalId);
+                            LOGGER.debug("DISCONNECTED from {}", remoteLocalId);
                         } catch (IOException e) {
                             LOGGER.info("Disconnecting of connection {} failed: {}", connection.getId(), e);
                         }
