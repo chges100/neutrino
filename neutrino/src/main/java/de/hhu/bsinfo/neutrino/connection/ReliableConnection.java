@@ -241,7 +241,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         // change connection state
         isConnected.getAndSet(true);
 
-        LOGGER.debug("Connected RC with id {} to remote {}", id, remoteInfo.getLocalId());
+        LOGGER.info("Connected RC with id {} to remote {}", id, remoteInfo.getLocalId());
 
         return true;
     }
@@ -607,7 +607,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         }
 
         if(!isTimeOut) {
-            LOGGER.debug("Handshake of connection {}  with message {} finished", getId(), msgType);
+            LOGGER.info("Handshake of connection {}  with message {} finished", getId(), msgType);
         }
 
         // free buffers
@@ -644,7 +644,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
         // now connection is ready to be connected
         changeConnection.getAndSet(false);
 
-        LOGGER.debug("Disconnected connection {}", id);
+        LOGGER.info("Disconnected connection {}", id);
     }
 
 

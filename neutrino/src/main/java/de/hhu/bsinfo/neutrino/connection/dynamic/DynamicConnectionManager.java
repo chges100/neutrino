@@ -82,7 +82,7 @@ public class DynamicConnectionManager {
         }
 
         localId = deviceContexts.get(0).getContext().queryPort().getLocalId();
-        LOGGER.debug("Local Id is {}", localId);
+        LOGGER.info("Local Id is {}", localId);
 
         if(deviceContexts.isEmpty()) {
             throw new IOException("Could not initialize any Infiniband device");
@@ -184,14 +184,14 @@ public class DynamicConnectionManager {
     }
 
     public void shutdown() throws InterruptedException {
-        LOGGER.debug("Shutdown dynamic connection manager");
+        LOGGER.info("Shutdown dynamic connection manager");
 
 
 
         udInformationHandler.shutdown();
-        LOGGER.debug("UDInformationHandler is shut down");
+        LOGGER.info("UDInformationHandler is shut down");
 
-        LOGGER.debug("Begin disconnecting all existing connections");
+        LOGGER.info("Begin disconnecting all existing connections");
 
         while(!connectionTable.isEmpty()) {
             /*for(var entry : connectionTable.entrySet()) {
@@ -202,32 +202,30 @@ public class DynamicConnectionManager {
                     dch.initDisconnectRequest(localId, (short) (long) remoteLocalId);
                 }
             }*/
-            TimeUnit.SECONDS.sleep(1);
+            TimeUnit.SECONDS.sleep(2);
         }
 
         rcDisconnector.shutdown();
-        LOGGER.debug("RCDisconnector is shut down");
+        LOGGER.info("RCDisconnector is shut down");
 
 
         rcCompletionPoller.shutdown();
-        LOGGER.debug("RCCQPT is shut down");
+        LOGGER.info("RCCQPT is shut down");
 
         dch.shutdown();
-        LOGGER.debug("DCH is shut down");
+        LOGGER.info("DCH is shut down");
 
         executor.shutdown();
 
         try {
             executor.awaitTermination(500, TimeUnit.MILLISECONDS);
-            LOGGER.debug("Executor is shut down");
+            LOGGER.info("Executor is shut down");
         } catch (InterruptedException e) {
             LOGGER.info("Thread Pool termination not yet finished - continue shutdown");
         }
 
         dch.close();
-        LOGGER.debug("DCH is closed");
-
-        LOGGER.debug("Completion queue size was {}", completionQueue.getMaxElements());
+        LOGGER.info("DCH is closed");
 
         printLocalBufferInfos();
     }
