@@ -163,7 +163,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
                 LOGGER.info("FINISHED REMOTE WRITE ON {}", remoteLocalId);
 
             } catch (Exception e) {
-                LOGGER.error("Could not complete workload on {}: {}", remoteLocalId, e.);
+                LOGGER.error("Could not complete workload on {}: {}", remoteLocalId, e);
             }
         }
     }
