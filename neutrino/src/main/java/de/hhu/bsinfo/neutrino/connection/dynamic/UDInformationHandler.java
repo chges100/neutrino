@@ -93,7 +93,8 @@ public class UDInformationHandler {
     private class UDInformationPropagator extends Thread {
         private final DatagramPacket datagram;
 
-        private final long sleepTime = 500;
+        private final long sleepTime = 1000;
+        private final long startUpSleepTime = 100;
 
         UDInformationPropagator() throws IOException {
             setName("UDInformationPropagator");
@@ -112,6 +113,21 @@ public class UDInformationHandler {
 
         @Override
         public void run() {
+
+            for(int i = 0; i < 20; i++) {
+                try {
+                    datagramSocket.send(datagram);
+                } catch (Exception e) {
+                    LOGGER.error("Could not broadcast UD information");
+                }
+
+                try {
+                    Thread.sleep(startUpSleepTime);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
             while(isRunning) {
                 try {
                     datagramSocket.send(datagram);

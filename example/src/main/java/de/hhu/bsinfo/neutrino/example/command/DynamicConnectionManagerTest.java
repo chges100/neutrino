@@ -146,12 +146,13 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         @Override
         public void run() {
-            var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
 
             try {
                 barrier.await();
 
                 LOGGER.info("START REMOTE WRITE ON {}", remoteLocalId);
+
+                var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
 
                 startTime.compareAndSet(0, System.nanoTime());
 
@@ -162,7 +163,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
                 LOGGER.info("FINISHED REMOTE WRITE ON {}", remoteLocalId);
 
             } catch (Exception e) {
-                LOGGER.error("Could not complete workload on {}", remoteLocalId);
+                LOGGER.error("Could not complete workload on {}: {}", remoteLocalId, e.);
             }
         }
     }

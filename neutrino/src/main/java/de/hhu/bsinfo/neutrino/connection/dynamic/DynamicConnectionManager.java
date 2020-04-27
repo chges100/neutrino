@@ -419,6 +419,8 @@ public class DynamicConnectionManager {
                     }
                 }
 
+                LOGGER.debug("Cound RC: {}", connectionTable.entrySet().toArray().length);
+
                 try {
                     Thread.sleep(RC_TIMEOUT);
                 } catch (InterruptedException e) {

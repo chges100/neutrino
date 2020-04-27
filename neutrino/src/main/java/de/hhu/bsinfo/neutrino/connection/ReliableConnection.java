@@ -622,7 +622,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
      * Disconnects from remote queue pair and transforms into init state.
      **/
     @Override
-    public void disconnect() throws IOException{
+    public Boolean disconnect() throws IOException{
 
         // either another thread is alreading disconnecting this connection or it is in unconnected state
         if(!isConnected.getAndSet(false)) {
@@ -631,20 +631,26 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
 
         LOGGER.trace("Start to disconnect connection {} from {}", id, remoteLocalId);
 
-        // handshake to ake shure that all pending requests are processed
-        handshake(MessageType.RC_DISCONNECT, HANDSHAKE_DISCONNECT_TIMEOUT_MS);
+        // handshake to make shure that all pending requests are processed
+        if(handshake(MessageType.RC_DISCONNECT, HANDSHAKE_DISCONNECT_TIMEOUT_MS)) {
+            // set remote local id
+            remoteLocalId.getAndSet(INVALID_LID);
 
-        // set remote local id
-        remoteLocalId.getAndSet(INVALID_LID);
+            // init and reset queue pair
+            reset();
+            init();
 
-        // init and reset queue pair
-        reset();
-        init();
+            // now connection is ready to be connected
+            changeConnection.getAndSet(false);
+            LOGGER.info("Disconnected connection {}", id);
 
-        // now connection is ready to be connected
-        changeConnection.getAndSet(false);
+            return true;
+        } else {
+            // if handshake fails, connection should not be disconnected
+            LOGGER.info("Did not disconnect connection {}", id);
 
-        LOGGER.info("Disconnected connection {}", id);
+            return false;
+        }
     }
 
 
