@@ -368,13 +368,13 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         private void handleBufferInfo() {
             var bufferInfo = new BufferInformation(payload[1], payload[2], (int) payload[3]);
-            var remoteLid = (short) payload[0];
+            var remoteLocalId = (short) payload[0];
 
-            LOGGER.trace("Received new remote buffer information from {}: {}", remoteLid, bufferInfo);
+            LOGGER.trace("Received new remote buffer information from {}: {}", remoteLocalId, bufferInfo);
 
-            dcm.remoteBufferHandler.registerBufferInfo(remoteLid, bufferInfo);
+            dcm.remoteBufferHandler.registerBufferInfo(remoteLocalId, bufferInfo);
 
-            sendBufferAck(msgId, dcm.getLocalId(), remoteLid);
+            sendBufferAck(msgId, dcm.getLocalId(), remoteLocalId);
         }
 
         private void handleBufferAck() {
@@ -522,42 +522,40 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             boolean bufferAck = false;
 
+            var remoteStatus = remoteStatusMap.putIfAbsent(remoteLocalId, new RemoteStatus());
+            if(remoteStatus == null) {
+                remoteStatus = remoteStatusMap.get(remoteLocalId);
+            }
+
             while (!bufferAck) {
                 var msgId = Message.provideGlobalId();
-
-                var remoteStatus = remoteStatusMap.putIfAbsent(remoteLocalId, new RemoteStatus());
-                if(remoteStatus == null) {
-                    remoteStatus = remoteStatusMap.get(remoteLocalId);
-                }
 
                 sendMessage(msgType, msgId, remoteHandlerTables.get(remoteLocalId), payload);
 
                 remoteStatus.waitForResponse(remoteStatus.buffer, RESP_BUFFER_ACK_TIMEOUT_MS);
 
-                if(remoteStatus.bufferAck.get()) {
-                    bufferAck = true;
-                }
+                bufferAck = remoteStatus.bufferAck.get();
             }
 
         }
 
         private void handleConnectionRequest() {
-            boolean informationAck = false;
+            boolean connectionAck = false;
 
-            while (!informationAck) {
+            var remoteStatus = remoteStatusMap.putIfAbsent(remoteLocalId, new RemoteStatus());
+            if(remoteStatus == null) {
+                remoteStatus = remoteStatusMap.get(remoteLocalId);
+            }
+
+            while (!connectionAck) {
                 var msgId = Message.provideGlobalId();
-
-                var remoteStatus = remoteStatusMap.putIfAbsent(remoteLocalId, new RemoteStatus());
-                if(remoteStatus == null) {
-                    remoteStatus = remoteStatusMap.get(remoteLocalId);
-                }
 
                 sendMessage(msgType, msgId, remoteHandlerTables.get(remoteLocalId), payload);
 
                 remoteStatus.waitForResponse(remoteStatus.connect, RESP_BUFFER_ACK_TIMEOUT_MS);
 
                 if(remoteStatus.connectAck.get()) {
-                    informationAck = true;
+                    connectionAck = true;
                 }
             }
         }

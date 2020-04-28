@@ -3,10 +3,11 @@ package de.hhu.bsinfo.neutrino.connection.dynamic;
 import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import org.agrona.collections.Int2IntHashMap;
 import org.agrona.collections.Int2ObjectHashMap;
+import org.jctools.maps.NonBlockingHashMapLong;
 
 public class RemoteBufferHandler {
 
-    private final Int2ObjectHashMap<BufferInformation> remoteBuffers = new Int2ObjectHashMap<>();
+    private final NonBlockingHashMapLong<BufferInformation> remoteBuffers = new NonBlockingHashMapLong<>();
 
     private final DynamicConnectionManager dcm;
 
@@ -14,15 +15,15 @@ public class RemoteBufferHandler {
         this.dcm = dcm;
     }
 
-    protected BufferInformation getBufferInfo(int remoteLocalId) {
+    protected BufferInformation getBufferInfo(short remoteLocalId) {
         return remoteBuffers.get(remoteLocalId);
     }
 
-    protected boolean hasBufferInfo(int remoteLocalId) {
+    protected boolean hasBufferInfo(short remoteLocalId) {
         return remoteBuffers.containsKey(remoteLocalId);
     }
 
-    protected void registerBufferInfo(int remoteLocalId, BufferInformation bufferInfo) {
+    protected void registerBufferInfo(short remoteLocalId, BufferInformation bufferInfo) {
         remoteBuffers.put(remoteLocalId, bufferInfo);
     }
 }

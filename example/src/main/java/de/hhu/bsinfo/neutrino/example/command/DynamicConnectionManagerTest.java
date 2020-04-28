@@ -33,8 +33,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private DynamicConnectionManager dcm;
     private CyclicBarrier barrier;
 
-    private AtomicLong startTime;
-    private AtomicLong endTime;
+    private AtomicLong startTime = new AtomicLong(0);
+    private AtomicLong endTime = new AtomicLong(0);
 
     @CommandLine.Option(
             names = {"-p", "--port"},
@@ -68,9 +68,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         dcm = new DynamicConnectionManager(port, bufferSize, statistics);
         dcm.init();
-
-        startTime = new AtomicLong(0);
-        endTime = new AtomicLong(0);
 
         var data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
         data.clear();
@@ -148,11 +145,15 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         public void run() {
 
             try {
+                var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
+
+                if(remoteBuffer == null) {
+                    TimeUnit.MILLISECONDS.sleep(500);
+                }
+
                 barrier.await();
 
                 LOGGER.info("START REMOTE WRITE ON {}", remoteLocalId);
-
-                var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
 
                 startTime.compareAndSet(0, System.nanoTime());
 

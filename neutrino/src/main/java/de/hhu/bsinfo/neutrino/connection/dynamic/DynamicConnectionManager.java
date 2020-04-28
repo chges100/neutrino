@@ -143,6 +143,10 @@ public class DynamicConnectionManager {
 
         rcUsageTable.setUsed(remoteLocalId);
 
+        if(remoteBuffer == null) {
+            throw new IOException("RemoteBUffer not available");
+        }
+
         connection.execute(data, opCode, offset, length, remoteBuffer.getAddress(), remoteBuffer.getRemoteKey(), 0);
 
         rwLocks.unlockRead(remoteLocalId);
