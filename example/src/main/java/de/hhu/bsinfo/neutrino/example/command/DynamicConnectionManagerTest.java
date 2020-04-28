@@ -28,13 +28,15 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final int DEFAULT_DEVICE_ID = 0;
     private static final int DEFAULT_ITERATIONS = 40;
     private static final int DEFAULT_THREAD_COUNT = 2;
+    private static final int DEFAULT_MODE = 0;
     private static final long TIMEOUT = TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
 
     private DynamicConnectionManager dcm;
     private CyclicBarrier barrier;
 
-    private AtomicLong startTime = new AtomicLong(0);
-    private AtomicLong endTime = new AtomicLong(0);
+    private PriorityScheduler executor = new PriorityScheduler(2);
+    private StatisticManager statistics = new StatisticManager();
+    private RegisteredBuffer data;
 
     @CommandLine.Option(
             names = {"-p", "--port"},
@@ -61,15 +63,18 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             description = "Sets the amaount of threads for each remote.")
     private int threadCount = DEFAULT_THREAD_COUNT;
 
+    @CommandLine.Option(
+            names = { "-m", "--mode" },
+            description = "Sets test mode:\n0 -> Throughput\n1 -> Latency")
+    private char mode = DEFAULT_THREAD_COUNT;
+
     @Override
     public Void call() throws Exception {
-
-        var statistics = new StatisticManager();
 
         dcm = new DynamicConnectionManager(port, bufferSize, statistics);
         dcm.init();
 
-        var data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
+        data = dcm.allocRegisteredBuffer(DEFAULT_DEVICE_ID, bufferSize);
         data.clear();
 
         var string = new NativeString(data, 0, bufferSize);
@@ -77,42 +82,9 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         TimeUnit.SECONDS.sleep(2);
 
-        var remoteLids = dcm.getRemoteLocalIds();
+        var remoteLocalIds = dcm.getRemoteLocalIds();
 
-        var workloads = new WorkloadExecutor[remoteLids.length];
-        var executor = new PriorityScheduler(remoteLids.length * threadCount);
-
-
-        barrier = new CyclicBarrier(remoteLids.length * threadCount);
-
-        for (short remoteLid : remoteLids) {
-            statistics.registerRemote(remoteLid);
-            for(int i = 0; i < threadCount; i++) {
-                executor.submit(new WorkloadExecutor(data, 0, remoteLid));
-            }
-        }
-
-        long expectedOperationCount = (long) threadCount * iterations * remoteLids.length;
-
-        TimeUnit.SECONDS.sleep(4);
-
-        var start = System.nanoTime();
-
-        while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {
-            /*if(System.nanoTime() - start > TIMEOUT) {
-                break;
-            }*/
-        }
-
-        endTime.set(System.nanoTime());
-
-        long bytes = statistics.getTotalRDMABytesWritten();
-        long count = statistics.getTotalRDMAWriteCount();
-
-        var time = endTime.get() - startTime.get();
-
-        var result = new Result(count, bytes, time, 0);
-
+        var result = benchmarkThroughput(remoteLocalIds);
 
         try {
             executor.shutdown();
@@ -130,15 +102,50 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     }
 
-    private class WorkloadExecutor implements Runnable {
+    private Result benchmarkThroughput(short ... remoteLocalIds) {
+
+        var startTime = new AtomicLong(0);
+        var endTime = new AtomicLong(0);
+
+        executor.setPoolSize(remoteLocalIds.length * threadCount);
+
+        barrier = new CyclicBarrier(remoteLocalIds.length * threadCount);
+
+        var workloads = new WorkloadThroughput[remoteLocalIds.length];
+
+        for (short remoteLid : remoteLocalIds) {
+            statistics.registerRemote(remoteLid);
+            for(int i = 0; i < threadCount; i++) {
+                executor.submit(new WorkloadThroughput(data, 0, remoteLid, startTime));
+            }
+        }
+
+        long expectedOperationCount = (long) threadCount * iterations * remoteLocalIds.length;
+
+        while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {}
+
+        endTime.set(System.nanoTime());
+
+        long bytes = statistics.getTotalRDMABytesWritten();
+        long count = statistics.getTotalRDMAWriteCount();
+
+        var time = endTime.get() - startTime.get();
+
+        return new Result(count, bytes, time, 0);
+    }
+
+
+    private class WorkloadThroughput implements Runnable {
         private RegisteredBuffer data;
         private long offset;
         private short remoteLocalId;
+        private AtomicLong timeStamp;
 
-        public WorkloadExecutor(RegisteredBuffer data, long offset, short remoteLocalId) {
+        public WorkloadThroughput(RegisteredBuffer data, long offset, short remoteLocalId, AtomicLong timeStamp) {
             this.data = data;
             this.offset = offset;
             this.remoteLocalId = remoteLocalId;
+            this.timeStamp = timeStamp;
         }
 
         @Override
@@ -155,7 +162,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
                 LOGGER.info("START REMOTE WRITE ON {}", remoteLocalId);
 
-                startTime.compareAndSet(0, System.nanoTime());
+                timeStamp.compareAndSet(0, System.nanoTime());
 
                 for(int i = 0; i < iterations; i++) {
                     dcm.remoteWrite(data, offset, bufferSize, remoteBuffer, remoteLocalId);

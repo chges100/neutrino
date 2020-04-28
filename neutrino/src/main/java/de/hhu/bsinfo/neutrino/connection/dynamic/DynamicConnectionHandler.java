@@ -397,7 +397,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             if(remoteStatus == null) {
                 LOGGER.error("No remote status for {}", remoteLocalId);
-            } else if(remoteStatus.disconnectAck.compareAndSet(RemoteStatus.DISCONNECT_NONE, RemoteStatus.DISCONNECT_ACCEPT)) {
+            } else if(dcm.rcUsageTable.getStatus(remoteLocalId) == RCUsageTable.RC_UNSUSED && remoteStatus.disconnectAck.compareAndSet(RemoteStatus.DISCONNECT_NONE, RemoteStatus.DISCONNECT_ACCEPT)) {
 
                 var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
 
