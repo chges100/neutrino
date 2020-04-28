@@ -391,54 +391,48 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         private void handleDisconnectRequest() {
             var remoteLocalId = (int) payload[0];
-            LOGGER.info("GOT disconnect request from {}", remoteLocalId);
+            LOGGER.info("Received disconnect request from {}", remoteLocalId);
 
             var remoteStatus = remoteStatusMap.get(remoteLocalId);
 
             if(remoteStatus == null) {
-                return;
-            }
+                LOGGER.error("No remote status for {}", remoteLocalId);
+            } else if(remoteStatus.disconnectAck.compareAndSet(RemoteStatus.DISCONNECT_NONE, RemoteStatus.DISCONNECT_ACCEPT)) {
 
-            if(remoteStatus.disconnectAck.get() == RemoteStatus.DISCONNECT_REQ) {
-                remoteStatus.disconnectAck.set(RemoteStatus.DISCONNECT_ACCEPT);
-                remoteStatus.signalAll(remoteStatus.disconnect);
+                var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
 
-                return;
-            }
+                if(locked) {
+                    if(dcm.rcUsageTable.getStatus(remoteLocalId) == RCUsageTable.RC_UNSUSED) {
 
-            // try to lock once - if lock is not available, connection is in use an  no disconnecting should occur
-            var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
+                        var msgId = Message.provideGlobalId();
+                        sendMessage(MessageType.HANDLER_REQ_DISCONNECT, msgId, remoteHandlerTables.get(remoteLocalId), dcm.getLocalId());
 
-            if(locked) {
-                if(dcm.rcUsageTable.getStatus(remoteLocalId) == RCUsageTable.RC_UNSUSED) {
-                    LOGGER.debug("GOT lock: can start disconnect from {}", remoteLocalId);
-                    var msgId = Message.provideGlobalId();
+                        var connection = dcm.connectionTable.get(remoteLocalId);
 
+                        if(connection != null && connection.isConnected()) {
+                            try {
+                                LOGGER.info("Disconnect from {}", remoteLocalId);
+                                var disconnected = connection.disconnect();
 
-                    remoteStatus.disconnectAck.set(RemoteStatus.DISCONNECT_ACCEPT);
-
-                    sendMessage(MessageType.HANDLER_REQ_DISCONNECT, msgId, remoteHandlerTables.get(remoteLocalId), dcm.getLocalId());
-
-                    var connection = dcm.connectionTable.get(remoteLocalId);
-
-                    if(connection != null && connection.isConnected()) {
-                        try {
-                            var disconnected = connection.disconnect();
-
-                            if(disconnected) {
-                                connection.close();
-                                dcm.connectionTable.remove(remoteLocalId);
-                                remoteStatus.resetConnection();
+                                if(disconnected) {
+                                    connection.close();
+                                    dcm.connectionTable.remove(remoteLocalId);
+                                    remoteStatus.resetConnection();
+                                }
+                            } catch (IOException e) {
+                                LOGGER.error("Something went wrong during disconnect from {}" , remoteLocalId);
                             }
-                        } catch (IOException e) {
-                            LOGGER.error("Something went wrong during disconnect from {}" , remoteLocalId);
                         }
 
                     }
-
-                    remoteStatus.disconnectAck.set(RemoteStatus.DISCONNECT_NONE);
+                    dcm.rwLocks.unlockWrite(remoteLocalId);
                 }
-                dcm.rwLocks.unlockWrite(remoteLocalId);
+
+                remoteStatus.disconnectAck.set(RemoteStatus.DISCONNECT_NONE);
+
+            } else if(remoteStatus.disconnectAck.compareAndSet(RemoteStatus.DISCONNECT_REQ, RemoteStatus.DISCONNECT_ACCEPT)) {
+                LOGGER.info("Disconnect request from {} already pending - wake other thread", remoteLocalId);
+                remoteStatus.signalAll(remoteStatus.disconnect);
             }
         }
 
@@ -561,53 +555,53 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleDisconnectRequest() {
-            LOGGER.debug("BEGIN disconnect req to {}", remoteLocalId);
+            LOGGER.info("Begin disconnect request to {}", remoteLocalId);
 
             var remoteStatus = remoteStatusMap.get(remoteLocalId);
 
-            if(remoteStatus == null || remoteStatus.disconnectAck.get() == RemoteStatus.DISCONNECT_REQ) {
-                LOGGER.debug("NO Disconnect {}; Remote Status null or already disconnect requesting", remoteLocalId);
-                return;
-            }
+            if(remoteStatus == null) {
+                LOGGER.error("No remote status for {}" , remoteLocalId);
+            } else if(remoteStatus.disconnectAck.compareAndSet(RemoteStatus.DISCONNECT_NONE, RemoteStatus.DISCONNECT_REQ)) {
 
-            // try to lock once - if lock is not available, connection is in use an  no disconnecting should occur
-            var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
+                var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
 
-            if(locked) {
-                LOGGER.debug("GOT lock: can start disconnect from {}", remoteLocalId);
-                var msgId = Message.provideGlobalId();
+                if(locked) {
+                    LOGGER.debug("GOT lock: can start disconnect from {}", remoteLocalId);
+                    var msgId = Message.provideGlobalId();
 
-                remoteStatus.disconnectAck.set(RemoteStatus.DISCONNECT_REQ);
+                    sendMessage(MessageType.HANDLER_REQ_DISCONNECT, msgId, remoteHandlerTables.get(remoteLocalId), dcm.getLocalId());
 
-                sendMessage(MessageType.HANDLER_REQ_DISCONNECT, msgId, remoteHandlerTables.get(remoteLocalId), dcm.getLocalId());
+                    LOGGER.info("Wait for answer to disconnect request {}", remoteLocalId);
 
-                LOGGER.debug("WAIT for answer to disconnect request {}", remoteLocalId);
+                    remoteStatus.waitForResponse(remoteStatus.disconnect, RESP_CONNECTION_REQ_TIMEOUT_MS);
 
-                remoteStatus.waitForResponse(remoteStatus.disconnect, RESP_CONNECTION_REQ_TIMEOUT_MS);
+                    if(remoteStatus.disconnectAck.get() == RemoteStatus.DISCONNECT_ACCEPT) {
+                        LOGGER.info("DISCONNECt accepted: {}" ,remoteLocalId);
+                        var connection = dcm.connectionTable.get(remoteLocalId);
 
-                if(remoteStatus.disconnectAck.get() == RemoteStatus.DISCONNECT_ACCEPT) {
-                    LOGGER.debug("DISCONNECt accepted: {}" ,remoteLocalId);
-                    var connection = dcm.connectionTable.get(remoteLocalId);
+                        if(connection != null && connection.isConnected()) {
+                            try {
+                                var disconnected = connection.disconnect();
 
-                    if(connection != null && connection.isConnected()) {
-                        try {
-                            var disconnected = connection.disconnect();
-
-                            if(disconnected) {
-                                connection.close();
-                                dcm.connectionTable.remove(remoteLocalId);
-                                remoteStatus.resetConnection();
+                                if(disconnected) {
+                                    connection.close();
+                                    dcm.connectionTable.remove(remoteLocalId);
+                                    remoteStatus.resetConnection();
+                                }
+                            } catch (IOException e) {
+                                LOGGER.error("Something went wrong during disconnect from {}" , remoteLocalId);
                             }
-                        } catch (IOException e) {
-                            LOGGER.error("Something went wrong during disconnect from {}" , remoteLocalId);
-                        }
 
+                        }
                     }
+
+                    dcm.rwLocks.unlockWrite(remoteLocalId);
                 }
 
                 remoteStatus.disconnectAck.set(RemoteStatus.DISCONNECT_NONE);
 
-                dcm.rwLocks.unlockWrite(remoteLocalId);
+            } else if(remoteStatus.disconnectAck.get() == RemoteStatus.DISCONNECT_REQ) {
+                LOGGER.info("Do not start disconnect request {}: request already pending", remoteLocalId);
             }
         }
 
@@ -645,8 +639,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private class RemoteStatus {
         public static final int DISCONNECT_NONE = 0;
         public static final int DISCONNECT_ACCEPT = 1;
-        public static final int DISCONNECT_REJECT = 2;
-        public static final int DISCONNECT_REQ = 3;
+        public static final int DISCONNECT_REQ = 2;
 
         public final ReentrantLock lock = new ReentrantLock();
 
