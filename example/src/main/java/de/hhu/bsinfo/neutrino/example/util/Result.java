@@ -40,12 +40,12 @@ public class Result {
         dataThroughput = (double) totalData / totalTime;
     }
 
-    private String getFormattedValue(String name, double value, String unit, int base) {
+    private String getFormattedValue(String name, double value, String unit) {
         double formattedValue = value;
 
         int counter = 0;
-        while (formattedValue > base && counter < metricTable.length) {
-            formattedValue = formattedValue / base;
+        while (formattedValue > 1000 && counter < metricTable.length) {
+            formattedValue = formattedValue / 1000;
             counter++;
         }
 
@@ -56,19 +56,19 @@ public class Result {
         return String.format("%-20s %.3f %c%s (%f)", name + ":", formattedValue, metricTable[counter], unit, value);
     }
 
-    private String getFormattedValue(String name, double value, int base) {
-        return getFormattedValue(name, value, "Units", base);
+    private String getFormattedValue(String name, double value) {
+        return getFormattedValue(name, value, "Units");
     }
 
     @Override
     public String toString() {
         return "Result {\n" +
-                "\t" + getFormattedValue("operationCount", operationCount, 1000) +
-                ",\n\t" + getFormattedValue("operationSize", operationSize, "Byte", 1024) +
-                ",\n\t" + getFormattedValue("totalTime", totalTime, "s", 1000) +
-                ",\n\t" + getFormattedValue("totalData", totalData, "Byte", 1024) +
-                ",\n\t" + getFormattedValue("operationThroughput", operationThroughput, "Operations/s", 1000) +
-                ",\n\t" + getFormattedValue("dataThroughput", dataThroughput, "Byte/s", 1024) +
+                "\t" + getFormattedValue("operationCount", operationCount) +
+                ",\n\t" + getFormattedValue("operationSize", operationSize, "Byte") +
+                ",\n\t" + getFormattedValue("totalTime", totalTime, "s") +
+                ",\n\t" + getFormattedValue("totalData", totalData, "Byte") +
+                ",\n\t" + getFormattedValue("operationThroughput", operationThroughput, "Operations/s") +
+                ",\n\t" + getFormattedValue("dataThroughput", dataThroughput, "Byte/s") +
                 "\n}";
     }
 }
