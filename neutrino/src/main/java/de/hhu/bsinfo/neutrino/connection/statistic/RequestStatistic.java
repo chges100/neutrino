@@ -6,7 +6,7 @@ import org.agrona.collections.Long2LongCounterMap;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-public class Statistic {
+public class RequestStatistic {
     public final short remoteLocalId;
     public final AtomicLong rdmaBytesWritten = new AtomicLong(0);
     public final AtomicLong rdmaBytesRead = new AtomicLong(0);
@@ -20,7 +20,7 @@ public class Statistic {
     public final AtomicLong otherOpCount = new AtomicLong(0);
     public final AtomicLong errorCount = new AtomicLong(0);
 
-    public Statistic(short remoteLocalId) {
+    public RequestStatistic(short remoteLocalId) {
         this.remoteLocalId = remoteLocalId;
     }
 }

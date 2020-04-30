@@ -2,15 +2,32 @@ package de.hhu.bsinfo.neutrino.connection.statistic;
 
 import org.jctools.maps.NonBlockingHashMapLong;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 public class StatisticManager {
-    private NonBlockingHashMapLong<Statistic> statisticMap = new NonBlockingHashMapLong<>();
+
+    private NonBlockingHashMapLong<RequestStatistic> requestStatisticMap = new NonBlockingHashMapLong<>();
+    private NonBlockingHashMapLong<LatencyStatistic> connectLatencyStatisticMap = new NonBlockingHashMapLong<>();
 
     public void registerRemote(short remoteLocalId) {
-        statisticMap.putIfAbsent(remoteLocalId, new Statistic(remoteLocalId));
+        requestStatisticMap.putIfAbsent(remoteLocalId, new RequestStatistic(remoteLocalId));
+    }
+
+    public void startConnectLatencyStatistic(long id, long startTime) {
+
+        var statistic = new LatencyStatistic();
+        statistic.id = id;
+        statistic.startTime = startTime;
+
+        connectLatencyStatisticMap.putIfAbsent(id, statistic);
+    }
+
+    public void endConnectLatencyStatistic(long id, long endTime) {
+        connectLatencyStatisticMap.get(id).endTime = endTime;
     }
 
     public void putSendEvent(short remoteLocalId, long bytesSend) {
-        var statistic = statisticMap.get(remoteLocalId);
+        var statistic = requestStatisticMap.get(remoteLocalId);
 
         if(statistic != null) {
             statistic.bytesSent.addAndGet(bytesSend);
@@ -19,7 +36,7 @@ public class StatisticManager {
     }
 
     public void putReceiveEvent(short remoteLocalId, long bytesReceived) {
-        var statistic = statisticMap.get(remoteLocalId);
+        var statistic = requestStatisticMap.get(remoteLocalId);
 
         if(statistic != null) {
             statistic.bytesReceived.addAndGet(bytesReceived);
@@ -28,7 +45,7 @@ public class StatisticManager {
     }
 
     public void putRDMAWriteEvent(short remoteLocalId, long bytesWritten) {
-        var statistic = statisticMap.get(remoteLocalId);
+        var statistic = requestStatisticMap.get(remoteLocalId);
 
         if(statistic != null) {
             statistic.rdmaBytesWritten.addAndGet(bytesWritten);
@@ -37,7 +54,7 @@ public class StatisticManager {
     }
 
     public void putRDMAReadEvent(short remoteLocalId, long bytesRead) {
-        var statistic = statisticMap.get(remoteLocalId);
+        var statistic = requestStatisticMap.get(remoteLocalId);
 
         if(statistic != null) {
             statistic.rdmaBytesRead.addAndGet(bytesRead);
@@ -46,7 +63,7 @@ public class StatisticManager {
     }
 
     public void putOtherOpEvent(short remoteLocalId) {
-        var statistic = statisticMap.get(remoteLocalId);
+        var statistic = requestStatisticMap.get(remoteLocalId);
 
         if(statistic != null) {
             statistic.otherOpCount.incrementAndGet();
@@ -54,7 +71,7 @@ public class StatisticManager {
     }
 
     public void putErrorEvent(short remoteLocalId) {
-        var statistic = statisticMap.get(remoteLocalId);
+        var statistic = requestStatisticMap.get(remoteLocalId);
 
         if(statistic != null) {
             statistic.errorCount.incrementAndGet();
@@ -64,7 +81,7 @@ public class StatisticManager {
     public long getTotalRDMABytesWritten() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.rdmaBytesWritten.get();
         }
 
@@ -74,7 +91,7 @@ public class StatisticManager {
     public long getTotalRDMABytesRead() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.rdmaBytesRead.get();
         }
 
@@ -84,7 +101,7 @@ public class StatisticManager {
     public long getTotalBytesSent() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.bytesSent.get();
         }
 
@@ -94,7 +111,7 @@ public class StatisticManager {
     public long getTotalBytesReceived() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.bytesReceived.get();
         }
 
@@ -104,7 +121,7 @@ public class StatisticManager {
     public long getTotalSendCount() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.sendCount.get();
         }
 
@@ -114,7 +131,7 @@ public class StatisticManager {
     public long getTotalReceiveCount() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.receiveCount.get();
         }
 
@@ -124,7 +141,7 @@ public class StatisticManager {
     public long getTotalRDMAWriteCount() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.rdmaWriteCount.get();
         }
 
@@ -134,7 +151,7 @@ public class StatisticManager {
     public long getTotalRDMAReadCount() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.rdmaReadCount.get();
         }
 
@@ -144,7 +161,7 @@ public class StatisticManager {
     public long getTotalOtherOpCount() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.otherOpCount.get();
         }
 
@@ -154,11 +171,26 @@ public class StatisticManager {
     public long getTotalErrorCount() {
         long ret = 0;
 
-        for(var statistic : statisticMap.values()) {
+        for(var statistic : requestStatisticMap.values()) {
             ret += statistic.errorCount.get();
         }
 
         return ret;
+    }
+
+    public long[] getConnectionLatencies() {
+        var data = connectLatencyStatisticMap.values();
+        long[] latencies = new long[data.size()];
+
+        int idx = 0;
+
+        for(var statistic : data) {
+            latencies[idx] = statistic.endTime - statistic.startTime;
+
+            idx++;
+        }
+
+        return latencies;
     }
 
 }

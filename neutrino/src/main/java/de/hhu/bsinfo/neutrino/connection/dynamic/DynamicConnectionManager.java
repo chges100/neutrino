@@ -4,7 +4,6 @@ import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.ReliableConnection;
-import de.hhu.bsinfo.neutrino.connection.statistic.Statistic;
 import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.connection.util.AtomicReadWriteLockArray;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
@@ -20,7 +19,6 @@ import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
@@ -66,7 +64,7 @@ public class DynamicConnectionManager {
 
     private final int portUDP;
 
-    private final StatisticManager statisticManager;
+    protected final StatisticManager statisticManager;
 
     public DynamicConnectionManager(int port, long rdmaBufferSize, StatisticManager statisticManager) throws IOException {
 
@@ -124,11 +122,17 @@ public class DynamicConnectionManager {
 
     private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, BufferInformation remoteBuffer, short remoteLocalId) throws IOException {
         boolean connected = false;
+        Long createdConnectionId = null;
         ReliableConnection connection = null;
 
         while (!connected) {
             if(!connectionTable.containsKey(remoteLocalId)) {
-                createConnection(remoteLocalId);
+                var start = System.nanoTime();
+                createdConnectionId = createConnection(remoteLocalId);
+
+                if(createdConnectionId != null) {
+                    statisticManager.startConnectLatencyStatistic(createdConnectionId, start);
+                }
             }
 
             rwLocks.readLock(remoteLocalId);
@@ -136,16 +140,17 @@ public class DynamicConnectionManager {
 
             if(connection != null && connection.isConnected()) {
                 connected = true;
+
             } else {
                 rwLocks.unlockRead(remoteLocalId);
             }
         }
 
-        rcUsageTable.setUsed(remoteLocalId);
-
-        if(remoteBuffer == null) {
-            throw new IOException("RemoteBUffer not available");
+        if(createdConnectionId != null) {
+            statisticManager.endConnectLatencyStatistic(createdConnectionId, System.nanoTime());
         }
+
+        rcUsageTable.setUsed(remoteLocalId);
 
         connection.execute(data, opCode, offset, length, remoteBuffer.getAddress(), remoteBuffer.getRemoteKey(), 0);
 
@@ -153,7 +158,8 @@ public class DynamicConnectionManager {
 
     }
 
-    protected void createConnection(short remoteLocalId) {
+    protected Long createConnection(short remoteLocalId) {
+        Long connectionId = null;
 
         var locked = rwLocks.writeLock(remoteLocalId, CREATE_CONNECTION_TIMEOUT);
 
@@ -164,6 +170,7 @@ public class DynamicConnectionManager {
                 var connection = new ReliableConnection(deviceContexts.get(0), RC_QUEUE_PAIR_SIZE, RC_QUEUE_PAIR_SIZE, completionQueue, completionQueue);
                 connection.init();
                 connectionTable.put(remoteLocalId, connection);
+                connectionId = connection.getId();
 
                 var localQP = new RCInformation(connection);
                 dch.initConnectionRequest(localQP, remoteLocalId);
@@ -177,6 +184,8 @@ public class DynamicConnectionManager {
         if(locked) {
             rwLocks.unlockWrite(remoteLocalId);
         }
+
+        return connectionId;
     }
 
     public RegisteredBuffer allocRegisteredBuffer(int deviceId, long size) {
@@ -198,14 +207,6 @@ public class DynamicConnectionManager {
         LOGGER.info("Begin disconnecting all existing connections");
 
         while(!connectionTable.isEmpty()) {
-            /*for(var entry : connectionTable.entrySet()) {
-                var remoteLocalId = entry.getKey();
-                var connection = entry.getValue();
-
-                if(connection.isConnected()) {
-                    dch.initDisconnectRequest(localId, (short) (long) remoteLocalId);
-                }
-            }*/
             TimeUnit.SECONDS.sleep(2);
         }
 

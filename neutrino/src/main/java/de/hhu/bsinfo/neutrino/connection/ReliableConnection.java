@@ -58,7 +58,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     /**
      * Atomic counter to provide global connection ids.
      */
-    private static final AtomicInteger connectionIdCounter = new AtomicInteger(0);
+    private static final AtomicLong connectionIdCounter = new AtomicLong(0);
 
     /**
      * Atomic counter to provide global work request ids.
@@ -79,7 +79,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
     /**
      * Global id of the connection
      */
-    private final int id;
+    private final long id;
 
     /**
      * Remote local id corresponding to the remote queue pair.
@@ -669,7 +669,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
      *
      * @return the connecion id
      */
-    public int getId() {
+    public long getId() {
         return id;
     }
 

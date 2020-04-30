@@ -14,32 +14,9 @@ import java.util.Arrays;
  */
 class LatencyStatistics {
     private long[] times;
-    private int pos;
 
-    private long tmpTime;
-
-    /**
-     * Constructor
-     * 
-     * @param size Total number of measurements to record.
-     */
-    LatencyStatistics(int size) {
-        times = new long[size];
-        pos = 0;
-    }
-
-    /**
-     * Start measuring time.
-     */
-    void start() {
-        tmpTime = System.nanoTime();
-    }
-
-    /**
-     * Stop measuring time (must be preceded by a call to start).
-     */
-    void stop() {
-        times[pos++] = System.nanoTime() - tmpTime;
+    void setLatencies(long... latencies) {
+        times = latencies.clone();
     }
     
     /**
@@ -64,7 +41,9 @@ class LatencyStatistics {
      * @return Time in ns.
      */
     double getMaxNs() {
-        return times[pos - 1];
+        sortAscending();
+
+        return times[times.length - 1];
     }
 
     /**
@@ -75,7 +54,7 @@ class LatencyStatistics {
     double getTotalNs() {
         double tmp = 0;
 
-        for (int i = 0; i < pos; i++) {
+        for (int i = 0; i < times.length; i++) {
             tmp += times[i];
         }
 
@@ -88,7 +67,7 @@ class LatencyStatistics {
      * @return Time in ns.
      */
     double getAvgNs() {
-        return getTotalNs() / pos;
+        return getTotalNs() / times.length;
     }
 
     /**
@@ -101,6 +80,6 @@ class LatencyStatistics {
             throw new IllegalArgumentException("Percentage must be between 0 and 1");
         }
 
-        return times[(int) Math.ceil(perc * pos) - 1];
+        return times[(int) Math.ceil(perc * times.length) - 1];
     }
 }

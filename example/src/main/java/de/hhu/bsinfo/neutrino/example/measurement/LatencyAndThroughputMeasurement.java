@@ -3,30 +3,25 @@ package de.hhu.bsinfo.neutrino.example.measurement;
 /**
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
  **/
-public class LatencyMeasurement extends Measurement {
+public class LatencyAndThroughputMeasurement extends Measurement {
 
     private double totalTime;
     private double operationThroughput;
+    private double dataThroughput;
     private LatencyStatistics latencyStatistics;
 
-    public LatencyMeasurement(int operationCount, int operationSize) {
+    public LatencyAndThroughputMeasurement(long operationCount, long operationSize) {
         super(operationCount, operationSize);
 
-        latencyStatistics = new LatencyStatistics(operationCount);
+        latencyStatistics = new LatencyStatistics();
     }
 
-    public void startSingleMeasurement() {
-        latencyStatistics.start();
-    }
-
-    public void stopSingleMeasurement() {
-        latencyStatistics.stop();
-    }
-
-    public void finishMeasuring(long timeInNanos) {
+    public void finishMeasuring(long timeInNanos, long... latencies) {
         totalTime = timeInNanos / 1000000000d;
 
         operationThroughput = (double) getOperationCount() / totalTime;
+        dataThroughput = (double) getTotalData() / totalTime;
+        latencyStatistics.setLatencies(latencies);
         latencyStatistics.sortAscending();
     }
 
@@ -62,6 +57,7 @@ public class LatencyMeasurement extends Measurement {
                 ",\n\t" + ValueFormatter.formatValue("totalData", getTotalData(), "Byte") +
                 ",\n\t" + ValueFormatter.formatValue("totalTime", getTotalTime(), "s") +
                 ",\n\t" + ValueFormatter.formatValue("operationThroughput", operationThroughput, "Operations/s") +
+                ",\n\t" + ValueFormatter.formatValue("dataThroughput", dataThroughput, "Byte/s") +
                 ",\n\t" + ValueFormatter.formatValue("averageLatency", getAverageLatency(), "s") +
                 ",\n\t" + ValueFormatter.formatValue("minimumLatency", getMinimumLatency(), "s") +
                 ",\n\t" + ValueFormatter.formatValue("maximumLatency", getMaximumLatency(), "s") +

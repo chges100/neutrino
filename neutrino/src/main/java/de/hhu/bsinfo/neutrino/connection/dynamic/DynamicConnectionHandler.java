@@ -345,11 +345,19 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
+            Long createdConnectionId = null;
+
             boolean connected = false;
 
             while (!connected) {
                 if (!dcm.connectionTable.containsKey(remoteLocalId)) {
-                    dcm.createConnection(remoteLocalId);
+                    var start = System.nanoTime();
+
+                    createdConnectionId = dcm.createConnection(remoteLocalId);
+
+                    if(createdConnectionId != null) {
+                        dcm.statisticManager.startConnectLatencyStatistic(createdConnectionId, start);
+                    }
                 }
 
                 dcm.rwLocks.readLock(remoteLocalId);
@@ -362,6 +370,10 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 } finally {
                     dcm.rwLocks.unlockRead(remoteLocalId);
                 }
+            }
+
+            if(createdConnectionId != null) {
+                dcm.statisticManager.endConnectLatencyStatistic(createdConnectionId, System.nanoTime());
             }
 
         }

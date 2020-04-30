@@ -4,6 +4,7 @@ import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.data.NativeString;
+import de.hhu.bsinfo.neutrino.example.measurement.LatencyAndThroughputMeasurement;
 import de.hhu.bsinfo.neutrino.example.measurement.ThroughputMeasurement;
 import de.hhu.bsinfo.neutrino.example.util.Result;
 import org.slf4j.Logger;
@@ -103,7 +104,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     }
 
-    private ThroughputMeasurement benchmarkThroughput(short ... remoteLocalIds) {
+    private LatencyAndThroughputMeasurement benchmarkThroughput(short ... remoteLocalIds) {
 
         var startTime = new AtomicLong(0);
         var endTime = new AtomicLong(0);
@@ -130,11 +131,12 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         long totalBytes = statistics.getTotalRDMABytesWritten();
         long operationCount = statistics.getTotalRDMAWriteCount();
         var operationSize = totalBytes / operationCount;
+        var connectLatencies = statistics.getConnectionLatencies();
 
         var time = endTime.get() - startTime.get();
 
-        var measurement = new ThroughputMeasurement(operationCount, operationSize);
-        measurement.setMeasuredTime(time);
+        var measurement = new LatencyAndThroughputMeasurement(operationCount, operationSize);
+        measurement.finishMeasuring(time, connectLatencies);
 
         return measurement;
     }
