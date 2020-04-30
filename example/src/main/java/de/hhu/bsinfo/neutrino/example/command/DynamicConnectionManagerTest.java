@@ -5,6 +5,8 @@ import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.data.NativeString;
 import de.hhu.bsinfo.neutrino.example.measurement.LatencyAndThroughputMeasurement;
+import de.hhu.bsinfo.neutrino.example.measurement.LatencyMeasurement;
+import de.hhu.bsinfo.neutrino.example.measurement.Measurement;
 import de.hhu.bsinfo.neutrino.example.measurement.ThroughputMeasurement;
 import de.hhu.bsinfo.neutrino.example.util.Result;
 import org.slf4j.Logger;
@@ -31,6 +33,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final int DEFAULT_ITERATIONS = 40;
     private static final int DEFAULT_THREAD_COUNT = 2;
     private static final int DEFAULT_MODE = 0;
+    private static final int DEFAULT_SLEEP_INTERVAL = 4000;
     private static final long TIMEOUT = TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
 
     private DynamicConnectionManager dcm;
@@ -68,7 +71,12 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     @CommandLine.Option(
             names = { "-m", "--mode" },
             description = "Sets test mode:\n0 -> Throughput\n1 -> Latency")
-    private char mode = DEFAULT_THREAD_COUNT;
+    private int mode = DEFAULT_MODE;
+
+    @CommandLine.Option(
+            names = { "-s", "--sleepinterval" },
+            description = "Sets default sleep interval for latency test")
+    private int sleepInterval = DEFAULT_SLEEP_INTERVAL;
 
     @Override
     public Void call() throws Exception {
@@ -86,7 +94,15 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var remoteLocalIds = dcm.getRemoteLocalIds();
 
-        var result = benchmarkThroughput(remoteLocalIds);
+        Measurement result = null;
+
+        if(mode == 0) {
+            result = benchmarkThroughput(remoteLocalIds);
+        } else if(mode == 1) {
+            LOGGER.debug("TADAAA");
+            result = benchmarkConnectLatency(remoteLocalIds);
+        }
+
 
         try {
             executor.shutdown();
@@ -141,6 +157,36 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         return measurement;
     }
 
+    private LatencyMeasurement benchmarkConnectLatency(short ... remoteLocalIds) {
+
+        executor.setPoolSize(remoteLocalIds.length * threadCount);
+
+        barrier = new CyclicBarrier(remoteLocalIds.length * threadCount);
+
+        var workloads = new WorkloadLatency[remoteLocalIds.length];
+
+        for (short remoteLid : remoteLocalIds) {
+            statistics.registerRemote(remoteLid);
+            for(int i = 0; i < threadCount; i++) {
+                executor.submit(new WorkloadLatency(data, remoteLid, sleepInterval));
+            }
+        }
+
+        long expectedOperationCount = (long) threadCount * iterations * remoteLocalIds.length;
+
+        while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {}
+
+        long totalBytes = statistics.getTotalRDMABytesWritten();
+        long operationCount = statistics.getTotalRDMAWriteCount();
+        var operationSize = totalBytes / operationCount;
+        var connectLatencies = statistics.getConnectionLatencies();
+
+        var measurement = new LatencyMeasurement(operationCount, operationSize);
+        measurement.finishMeasuring(connectLatencies);
+
+        return measurement;
+    }
+
 
     private class WorkloadThroughput implements Runnable {
         private RegisteredBuffer data;
@@ -176,6 +222,46 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
                 }
 
                 LOGGER.info("FINISHED REMOTE WRITE ON {}", remoteLocalId);
+
+            } catch (Exception e) {
+                LOGGER.error("Could not complete workload on {}", remoteLocalId);
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private class WorkloadLatency implements Runnable {
+        private RegisteredBuffer data;
+        private short remoteLocalId;
+        private long sleepTimeMs;
+
+        public WorkloadLatency(RegisteredBuffer data, short remoteLocalId, long sleetTimeMs) {
+            this.data = data;
+            this.remoteLocalId = remoteLocalId;
+            this.sleepTimeMs = sleetTimeMs;
+        }
+
+        @Override
+        public void run() {
+
+            try {
+                var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
+
+                if(remoteBuffer == null) {
+                    TimeUnit.MILLISECONDS.sleep(500);
+                }
+
+                barrier.await();
+
+                LOGGER.info("START LATENCY TEST TO REMOTE {}", remoteLocalId);
+
+                for(int i = 0; i < iterations; i++) {
+                    dcm.remoteWrite(data, 0, bufferSize, remoteBuffer, remoteLocalId);
+
+                    TimeUnit.MILLISECONDS.sleep(sleepTimeMs);
+                }
+
+                LOGGER.info("FINISHED LATENCY TEST TO {}", remoteLocalId);
 
             } catch (Exception e) {
                 LOGGER.error("Could not complete workload on {}", remoteLocalId);

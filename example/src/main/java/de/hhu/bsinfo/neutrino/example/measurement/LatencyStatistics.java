@@ -61,6 +61,10 @@ class LatencyStatistics {
         return tmp;
     }
 
+    long getLatencyCount() {
+        return times.length;
+    }
+
     /**
      * Get the average time in ns.
      *
