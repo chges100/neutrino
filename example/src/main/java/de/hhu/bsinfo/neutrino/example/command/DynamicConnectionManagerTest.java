@@ -4,18 +4,19 @@ import de.hhu.bsinfo.neutrino.buffer.RegisteredBuffer;
 import de.hhu.bsinfo.neutrino.connection.dynamic.DynamicConnectionManager;
 import de.hhu.bsinfo.neutrino.connection.statistic.StatisticManager;
 import de.hhu.bsinfo.neutrino.data.NativeString;
-import de.hhu.bsinfo.neutrino.example.measurement.LatencyAndThroughputMeasurement;
 import de.hhu.bsinfo.neutrino.example.measurement.LatencyMeasurement;
 import de.hhu.bsinfo.neutrino.example.measurement.Measurement;
 import de.hhu.bsinfo.neutrino.example.measurement.ThroughputMeasurement;
-import de.hhu.bsinfo.neutrino.example.util.Result;
+import org.agrona.collections.ArrayUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import org.threadly.concurrent.*;
 
+import java.util.Arrays;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.LongStream;
 
 
 @CommandLine.Command(
@@ -33,7 +34,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final int DEFAULT_ITERATIONS = 40;
     private static final int DEFAULT_THREAD_COUNT = 2;
     private static final int DEFAULT_MODE = 0;
-    private static final int DEFAULT_SLEEP_INTERVAL = 4000;
+    private static final int DEFAULT_SLEEP_INTERVAL = 6000;
     private static final long TIMEOUT = TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
 
     private DynamicConnectionManager dcm;
@@ -99,7 +100,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         if(mode == 0) {
             result = benchmarkThroughput(remoteLocalIds);
         } else if(mode == 1) {
-            LOGGER.debug("TADAAA");
             result = benchmarkConnectLatency(remoteLocalIds);
         }
 
@@ -120,7 +120,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     }
 
-    private LatencyAndThroughputMeasurement benchmarkThroughput(short ... remoteLocalIds) {
+    private ThroughputMeasurement benchmarkThroughput(short ... remoteLocalIds) {
 
         var startTime = new AtomicLong(0);
         var endTime = new AtomicLong(0);
@@ -147,12 +147,11 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         long totalBytes = statistics.getTotalRDMABytesWritten();
         long operationCount = statistics.getTotalRDMAWriteCount();
         var operationSize = totalBytes / operationCount;
-        var connectLatencies = statistics.getConnectionLatencies();
 
         var time = endTime.get() - startTime.get();
 
-        var measurement = new LatencyAndThroughputMeasurement(operationCount, operationSize);
-        measurement.finishMeasuring(time, connectLatencies);
+        var measurement = new ThroughputMeasurement(operationCount, operationSize);
+        measurement.setMeasuredTime(time);
 
         return measurement;
     }
@@ -179,10 +178,13 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         long totalBytes = statistics.getTotalRDMABytesWritten();
         long operationCount = statistics.getTotalRDMAWriteCount();
         var operationSize = totalBytes / operationCount;
-        var connectLatencies = statistics.getConnectionLatencies();
+        var connectLatencies = statistics.getConnectLatencies();
 
         var measurement = new LatencyMeasurement(operationCount, operationSize);
-        measurement.finishMeasuring(connectLatencies);
+
+        if(connectLatencies.length > 0) {
+            measurement.addLatencyMeasurement("Create Connection", connectLatencies);
+        }
 
         return measurement;
     }
@@ -251,11 +253,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
                     TimeUnit.MILLISECONDS.sleep(500);
                 }
 
-                barrier.await();
-
                 LOGGER.info("START LATENCY TEST TO REMOTE {}", remoteLocalId);
 
                 for(int i = 0; i < iterations; i++) {
+                    barrier.await();
                     dcm.remoteWrite(data, 0, bufferSize, remoteBuffer, remoteLocalId);
 
                     TimeUnit.MILLISECONDS.sleep(sleepTimeMs);

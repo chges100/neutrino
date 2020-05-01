@@ -6,8 +6,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class StatisticManager {
 
-    private NonBlockingHashMapLong<RequestStatistic> requestStatisticMap = new NonBlockingHashMapLong<>();
-    private NonBlockingHashMapLong<LatencyStatistic> connectLatencyStatisticMap = new NonBlockingHashMapLong<>();
+    private final NonBlockingHashMapLong<RequestStatistic> requestStatisticMap = new NonBlockingHashMapLong<>();
+    private final NonBlockingHashMapLong<LatencyStatistic> connectLatencyStatisticMap = new NonBlockingHashMapLong<>();
 
     public void registerRemote(short remoteLocalId) {
         requestStatisticMap.putIfAbsent(remoteLocalId, new RequestStatistic(remoteLocalId));
@@ -23,7 +23,7 @@ public class StatisticManager {
     }
 
     public void endConnectLatencyStatistic(long id, long endTime) {
-        connectLatencyStatisticMap.get(id).endTime = endTime;
+       connectLatencyStatisticMap.get(id).endTime = endTime;
     }
 
     public void putSendEvent(short remoteLocalId, long bytesSend) {
@@ -178,7 +178,7 @@ public class StatisticManager {
         return ret;
     }
 
-    public long[] getConnectionLatencies() {
+    public long[] getConnectLatencies() {
         var data = connectLatencyStatisticMap.values();
         long[] latencies = new long[data.size()];
 

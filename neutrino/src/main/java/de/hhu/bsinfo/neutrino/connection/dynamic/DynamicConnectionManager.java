@@ -122,17 +122,12 @@ public class DynamicConnectionManager {
 
     private void remoteExecute(SendWorkRequest.OpCode opCode, RegisteredBuffer data, long offset, long length, BufferInformation remoteBuffer, short remoteLocalId) throws IOException {
         boolean connected = false;
-        Long createdConnectionId = null;
         ReliableConnection connection = null;
 
         while (!connected) {
             if(!connectionTable.containsKey(remoteLocalId)) {
                 var start = System.nanoTime();
-                createdConnectionId = createConnection(remoteLocalId);
-
-                if(createdConnectionId != null) {
-                    statisticManager.startConnectLatencyStatistic(createdConnectionId, start);
-                }
+                createConnection(remoteLocalId);
             }
 
             rwLocks.readLock(remoteLocalId);
@@ -146,10 +141,6 @@ public class DynamicConnectionManager {
             }
         }
 
-        if(createdConnectionId != null) {
-            statisticManager.endConnectLatencyStatistic(createdConnectionId, System.nanoTime());
-        }
-
         rcUsageTable.setUsed(remoteLocalId);
 
         connection.execute(data, opCode, offset, length, remoteBuffer.getAddress(), remoteBuffer.getRemoteKey(), 0);
@@ -158,8 +149,10 @@ public class DynamicConnectionManager {
 
     }
 
-    protected Long createConnection(short remoteLocalId) {
-        Long connectionId = null;
+    protected boolean createConnection(short remoteLocalId) {
+        boolean createdConnection = false;
+
+        long startConnect = System.nanoTime();
 
         var locked = rwLocks.writeLock(remoteLocalId, CREATE_CONNECTION_TIMEOUT);
 
@@ -167,13 +160,17 @@ public class DynamicConnectionManager {
             try {
                 statisticManager.registerRemote(remoteLocalId);
 
+
                 var connection = new ReliableConnection(deviceContexts.get(0), RC_QUEUE_PAIR_SIZE, RC_QUEUE_PAIR_SIZE, completionQueue, completionQueue);
                 connection.init();
                 connectionTable.put(remoteLocalId, connection);
-                connectionId = connection.getId();
+
+                statisticManager.startConnectLatencyStatistic(connection.getId(), startConnect);
 
                 var localQP = new RCInformation(connection);
                 dch.initConnectionRequest(localQP, remoteLocalId);
+
+                createdConnection = true;
 
                 rcUsageTable.setUsed(remoteLocalId);
             } catch (IOException e) {
@@ -185,7 +182,7 @@ public class DynamicConnectionManager {
             rwLocks.unlockWrite(remoteLocalId);
         }
 
-        return connectionId;
+        return createdConnection;
     }
 
     public RegisteredBuffer allocRegisteredBuffer(int deviceId, long size) {
@@ -385,7 +382,7 @@ public class DynamicConnectionManager {
                     }
 
                 } else {
-                    LOGGER.error("Send Work completiom failed: {}\n{}", completion.getStatus(), completion.getStatusMessage());
+                    LOGGER.error("Send Work completiom failed: {}\n{} with OpCode {}", completion.getStatus(), completion.getStatusMessage(), completion.getOpCode());
 
                     if(opCode == WorkCompletion.OpCode.SEND) {
                         connection.getHandshakeQueue().pushSendError();

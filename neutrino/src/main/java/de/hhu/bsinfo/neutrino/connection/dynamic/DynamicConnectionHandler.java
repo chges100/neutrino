@@ -345,19 +345,14 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
-            Long createdConnectionId = null;
-
             boolean connected = false;
 
             while (!connected) {
                 if (!dcm.connectionTable.containsKey(remoteLocalId)) {
                     var start = System.nanoTime();
 
-                    createdConnectionId = dcm.createConnection(remoteLocalId);
+                    dcm.createConnection(remoteLocalId);
 
-                    if(createdConnectionId != null) {
-                        dcm.statisticManager.startConnectLatencyStatistic(createdConnectionId, start);
-                    }
                 }
 
                 dcm.rwLocks.readLock(remoteLocalId);
@@ -365,17 +360,13 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
                 try {
                     connected = connection.connect(remoteInfo);
+                    dcm.statisticManager.endConnectLatencyStatistic(connection.getId(), System.nanoTime());
                 } catch (Exception e) {
                     LOGGER.info("Could not connect to remote {}\n{}", remoteLocalId, e);
                 } finally {
                     dcm.rwLocks.unlockRead(remoteLocalId);
                 }
             }
-
-            if(createdConnectionId != null) {
-                dcm.statisticManager.endConnectLatencyStatistic(createdConnectionId, System.nanoTime());
-            }
-
         }
 
         private void handleBufferInfo() {
