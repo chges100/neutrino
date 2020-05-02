@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * @author Christian Gesse
  */
-public class ReliableConnection extends QPSocket implements Connectable<Boolean, RCInformation> {
+public class ReliableConnection extends QPSocket implements Connectable<RCInformation> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReliableConnection.class);
 
@@ -203,7 +203,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
      * @param the information about remote quuee pair
      * @return boolean indicating if connection was established successfully
      */
-    public Boolean connect(RCInformation remoteInfo) throws IOException {
+    public boolean connect(RCInformation remoteInfo) throws IOException {
 
         // indicate that connection state is changing and stop if necessary
         if(changeConnection.getAndSet(true)){
@@ -622,7 +622,7 @@ public class ReliableConnection extends QPSocket implements Connectable<Boolean,
      * Disconnects from remote queue pair and transforms into init state.
      **/
     @Override
-    public Boolean disconnect() throws IOException{
+    public boolean disconnect() throws IOException{
 
         // either another thread is alreading disconnecting this connection or it is in unconnected state
         if(!isConnected.getAndSet(false)) {
