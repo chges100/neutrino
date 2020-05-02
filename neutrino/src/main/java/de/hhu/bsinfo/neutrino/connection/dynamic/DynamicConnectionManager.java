@@ -382,7 +382,7 @@ public class DynamicConnectionManager {
                     }
 
                 } else {
-                    LOGGER.error("Send Work completiom failed: {}\n{} with OpCode {}", completion.getStatus(), completion.getStatusMessage(), completion.getOpCode());
+                    LOGGER.error("Work completiom failed: {}\n{} with OpCode {}", completion.getStatus(), completion.getStatusMessage(), completion.getOpCode());
 
                     if(opCode == WorkCompletion.OpCode.SEND) {
                         connection.getHandshakeQueue().pushSendError();

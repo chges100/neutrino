@@ -58,12 +58,12 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     /**
      * Atomic counter to provide global connection ids.
      */
-    private static final AtomicLong connectionIdCounter = new AtomicLong(0);
+    private static final AtomicLong connectionIdCounter = new AtomicLong(1);
 
     /**
      * Atomic counter to provide global work request ids.
      */
-    protected static final AtomicLong wrIdProvider = new AtomicLong(0);
+    protected static final AtomicLong wrIdProvider = new AtomicLong(1);
 
     /**
      * Efficient hash map containing work request ids and corresponding information for the work request.
@@ -102,6 +102,21 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     private final RCHandshakeQueue handshakeQueue;
 
     /**
+     * Fixed buffer to send handshake message
+     */
+    private final RegisteredBuffer handshakeSendBuffer;
+
+    /**
+     * Fixed buffer to receive handshake message
+     */
+    private final RegisteredBuffer handshakeReceiveBuffer;
+
+    /**
+     * Determines if handshake is performed when connectin to remote queue pair
+     */
+    private boolean doConnectHandshake = false;
+
+    /**
      * Creates a new Reliable connection.
      *
      * @param deviceContext the device context
@@ -110,6 +125,9 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
     public ReliableConnection(DeviceContext deviceContext) throws IOException {
 
         super(deviceContext);
+
+        handshakeSendBuffer = deviceContext.allocRegisteredBuffer(Message.getSize());
+        handshakeReceiveBuffer = deviceContext.allocRegisteredBuffer(Message.getSize());
 
         handshakeQueue = new RCHandshakeQueue();
 
@@ -137,6 +155,9 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         super(deviceContext,sendQueueSize, receiveQueueSize, sendCompletionQueueSize, receiveCompletionQueueSize);
 
+        handshakeSendBuffer = deviceContext.allocRegisteredBuffer(Message.getSize());
+        handshakeReceiveBuffer = deviceContext.allocRegisteredBuffer(Message.getSize());
+
         handshakeQueue = new RCHandshakeQueue();
 
         id = connectionIdCounter.getAndIncrement();
@@ -163,6 +184,9 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
         super(deviceContext, sendQueueSize, receiveQueueSize, sendCompletionQueue, receiveCompletionQueue);
 
+        handshakeSendBuffer = deviceContext.allocRegisteredBuffer(Message.getSize());
+        handshakeReceiveBuffer = deviceContext.allocRegisteredBuffer(Message.getSize());
+
         handshakeQueue = new RCHandshakeQueue();
 
         id = connectionIdCounter.getAndIncrement();
@@ -175,10 +199,11 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         }
     }
 
-    @Override
+
     /**
      * Initializes the connection and transforms queue piar into init state.
      */
+    @Override
     public void init() throws IOException {
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildInitAttributesRC((short) 0, (byte) 1, AccessFlag.LOCAL_WRITE, AccessFlag.REMOTE_READ, AccessFlag.REMOTE_WRITE))) {
             throw new IOException("Unable to move queue pair into INIT state");
@@ -196,13 +221,13 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         }
     }
 
-    @Override
     /**
      * Connects queue pair to remote and transforms it into ready to send state.
      *
      * @param the information about remote quuee pair
      * @return boolean indicating if connection was established successfully
      */
+    @Override
     public boolean connect(RCInformation remoteInfo) throws IOException {
 
         // indicate that connection state is changing and stop if necessary
@@ -213,14 +238,16 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         // transform queue pair into ready to receive state
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToReceiveAttributesRC(
                 remoteInfo.getQueuePairNumber(), remoteInfo.getLocalId(), remoteInfo.getPortNumber()))) {
-            throw new IOException("Unable to move queue pair into RTR state");
+            LOGGER.error("Unable to move queue pair into RTR state");
+            return false;
         }
 
         LOGGER.trace("Moved queue pair into RTR state with remote {}", remoteInfo.getLocalId());
 
         // transform queue pair into ready to send state
         if(!queuePair.modify(QueuePair.Attributes.Builder.buildReadyToSendAttributesRC())) {
-            throw new IOException("Unable to move queue pair into RTS state");
+            LOGGER.error("Unable to move queue pair into RTS state");
+            return false;
         }
 
         LOGGER.trace("Moved queue pair into RTS state");
@@ -229,14 +256,17 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         remoteLocalId.set(remoteInfo.getLocalId());
 
         // try handshake with remote queue pair
-        if(!handshake(MessageType.RC_CONNECT, HANDSHAKE_CONNECT_TIMEOUT_MS)) {
-            // reset queue pair if handshake failed
-            reset();
-            init();
+        if(doConnectHandshake) {
+            if(!handshake(MessageType.RC_CONNECT, HANDSHAKE_CONNECT_TIMEOUT_MS)) {
+                // reset queue pair if handshake failed
+                reset();
+                init();
 
-            changeConnection.set(false);
-            return false;
+                changeConnection.set(false);
+                return false;
+            }
         }
+
 
         // change connection state
         isConnected.getAndSet(true);
@@ -481,9 +511,11 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         var timeOutNs = TimeUnit.NANOSECONDS.convert(timeOutMs, TimeUnit.MILLISECONDS);
 
         // create new message for the handshake
-        var message = new Message(getDeviceContext(), msgType, Message.provideGlobalId());
+        var message = new Message(handshakeSendBuffer);
+        message.setMessageType(msgType);
+        message.setId(Message.provideGlobalId());
         // prepare buffer to receive message from remote queue pair
-        var receiveBuffer = getDeviceContext().allocRegisteredBuffer(Message.getSize());
+        var receiveBuffer = handshakeReceiveBuffer;
         receiveBuffer.clear();
 
         // post recieve work request for remote message
@@ -533,10 +565,6 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         if(!isTimeOut) {
             LOGGER.info("Handshake of connection {}  with message {} finished", getId(), msgType);
         }
-
-        // free buffers
-        message.close();
-        receiveBuffer.close();
 
         // if timeout did not occur, the handshake was successful
         return !isTimeOut;
@@ -617,6 +645,15 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
      */
     public short getRemoteLocalId() {
         return (short) remoteLocalId.get();
+    }
+
+    /**
+     * Sets the conenct handshake indicator.
+     *
+     * @param val value to set
+     */
+    public void setDoConnectHandshake(boolean val) {
+        doConnectHandshake = val;
     }
 
     @Override
