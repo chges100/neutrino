@@ -141,49 +141,6 @@ public class UnreliableDatagram extends QPSocket{
         return new ReceiveWorkRequest.Builder().withScatterGatherElement(sge).withId(wrId).build();
     }
 
-    protected CompletionQueue.WorkCompletionArray pollReceiveCompletions(int count) {
-        var completionArray = new CompletionQueue.WorkCompletionArray(count);
-        receiveCompletionQueue.poll(completionArray);
-
-        return completionArray;
-    }
-
-    public int pollReceive(int count) throws IOException {
-        var completionArray = pollReceiveCompletions(count);
-
-        for(int i = 0; i < completionArray.getLength(); i++) {
-            var completion = completionArray.get(i);
-            if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
-                LOGGER.error("Work completion failes with error [{}]: {}", completion.getStatus(), completion.getStatusMessage());
-                throw new IOException("WorkCompletion Failed");
-            }
-        }
-
-        return completionArray.getLength();
-    }
-
-    protected CompletionQueue.WorkCompletionArray pollSendCompletions(int count) {
-        var completionArray = new CompletionQueue.WorkCompletionArray(count);
-        sendCompletionQueue.poll(completionArray);
-
-
-        return completionArray;
-    }
-
-    public int pollSend(int count) throws IOException {
-        var completionArray = pollSendCompletions(count);
-
-        for(int i = 0; i < completionArray.getLength(); i++) {
-            var completion = completionArray.get(i);
-            if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
-                LOGGER.error("Work completion failes with error [{}]: {}", completion.getStatus(), completion.getStatusMessage());
-                throw new IOException("WorkCompletion Failed");
-            }
-        }
-
-        return completionArray.getLength();
-    }
-
     public int getId() {
         return id;
     }

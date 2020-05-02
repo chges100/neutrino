@@ -308,4 +308,20 @@ public abstract class QPSocket {
     public int getReceiveQueueSize() {
         return receiveQueueSize;
     }
+
+    /**
+     * Returns the send completion queue.
+     * @return the send completion queue
+     */
+    public CompletionQueue getSendCompletionQueue() {
+        return sendCompletionQueue;
+    }
+
+    /**
+     * Returns the receive completion queue.
+     * @return the receive completion queue
+     */
+    public CompletionQueue getReceiveCompletionQueue() {
+        return receiveCompletionQueue;
+    }
 }

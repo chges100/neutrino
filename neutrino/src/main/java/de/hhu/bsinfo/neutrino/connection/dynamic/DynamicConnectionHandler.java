@@ -14,10 +14,7 @@ import de.hhu.bsinfo.neutrino.connection.util.SGEProvider;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
 import de.hhu.bsinfo.neutrino.util.NativeObjectRegistry;
 import de.hhu.bsinfo.neutrino.util.Poolable;
-import de.hhu.bsinfo.neutrino.verbs.ReceiveWorkRequest;
-import de.hhu.bsinfo.neutrino.verbs.ScatterGatherElement;
-import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
-import de.hhu.bsinfo.neutrino.verbs.WorkCompletion;
+import de.hhu.bsinfo.neutrino.verbs.*;
 import org.agrona.collections.Int2ObjectHashMap;
 import org.jctools.maps.NonBlockingHashMapLong;
 import org.slf4j.Logger;
@@ -230,9 +227,11 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 receiveMessage();
             }
 
+            var workCompletions = new CompletionQueue.WorkCompletionArray(batchSize);
+
             while(isRunning) {
 
-                var workCompletions = pollSendCompletions(batchSize);
+                sendCompletionQueue.poll(workCompletions);
 
                 for(int i = 0; i < workCompletions.getLength(); i++) {
                     var completion = workCompletions.get(i);
@@ -250,7 +249,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     sendWorkRequests[(int) completion.getId()] = null;
                 }
 
-                workCompletions = pollReceiveCompletions(batchSize);
+                receiveCompletionQueue.poll(workCompletions);
 
                 for(int i = 0; i < workCompletions.getLength(); i++) {
                     var completion = workCompletions.get(i);
