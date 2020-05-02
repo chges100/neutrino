@@ -91,7 +91,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var string = new NativeString(data, 0, bufferSize);
         string.set("Node " + dcm.getLocalId());
 
-        TimeUnit.SECONDS.sleep(10);
+        TimeUnit.SECONDS.sleep(2);
 
         var remoteLocalIds = dcm.getRemoteLocalIds();
 

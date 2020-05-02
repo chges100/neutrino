@@ -9,7 +9,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class BaseMessage<T extends LocalBuffer> implements NativeObject {
 
-    private static final AtomicLong globalIdProvider = new AtomicLong(0);
+    // 0 is invalid id
+    private static final AtomicLong globalIdProvider = new AtomicLong(1);
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseMessage.class);
     private static final int PAYLOAD_COUNT = 4;
