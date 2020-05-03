@@ -1,6 +1,5 @@
 package de.hhu.bsinfo.neutrino.connection.dynamic;
 
-import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,7 +9,6 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.concurrent.locks.LockSupport;
 
 public class UDInformationHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(UDInformationHandler.class);
@@ -24,7 +22,7 @@ public class UDInformationHandler {
 
     private boolean isRunning  = true;
 
-    private final int timeout = 500;
+    private final int timeoutMs = 500;
     private final int port;
 
     private final short localId;
@@ -35,7 +33,7 @@ public class UDInformationHandler {
         this.localId = dcm.getLocalId();
 
         datagramSocket = new DatagramSocket(port);
-        datagramSocket.setSoTimeout(timeout);
+        datagramSocket.setSoTimeout(timeoutMs);
         datagramSocket.setBroadcast(true);
 
         udReceiver = new UDInformationReceiver();
@@ -93,8 +91,8 @@ public class UDInformationHandler {
     private class UDInformationPropagator extends Thread {
         private final DatagramPacket datagram;
 
-        private final long sleepTime = 1000;
-        private final long startUpSleepTime = 100;
+        private final long sleepTimeMs = 1000;
+        private final long startUpSleepTimeMs = 100;
 
         UDInformationPropagator() throws IOException {
             setName("UDInformationPropagator");
@@ -122,7 +120,7 @@ public class UDInformationHandler {
                 }
 
                 try {
-                    Thread.sleep(startUpSleepTime);
+                    Thread.sleep(startUpSleepTimeMs);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -136,7 +134,7 @@ public class UDInformationHandler {
                 }
 
                 try {
-                    Thread.sleep(sleepTime);
+                    Thread.sleep(sleepTimeMs);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }

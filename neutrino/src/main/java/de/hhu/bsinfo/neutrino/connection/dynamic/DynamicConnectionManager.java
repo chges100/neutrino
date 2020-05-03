@@ -25,13 +25,12 @@ public class DynamicConnectionManager {
 
     private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 200;
 
-    private static final long RC_TIMEOUT = 2000;
+    private static final long RC_TIMEOUT_MS = 2000;
 
     private static final int LOCAL_BUFFER_READ = 16;
     private static final short INVALID_LID = Short.MAX_VALUE;
 
-    private static final long CREATE_CONNECTION_TIMEOUT = 100;
-    private static final long REMOTE_EXEC_PARK_TIME = 1000;
+    private static final long CREATE_CONNECTION_TIMEOUT_MS = 100;
 
     private static final int RC_MIN_COMPLETION_QUEUE_SIZE = 400;
     private static final int RC_QUEUE_PAIR_SIZE = 100;
@@ -154,7 +153,7 @@ public class DynamicConnectionManager {
 
         long startConnect = System.nanoTime();
 
-        var locked = rwLocks.writeLock(remoteLocalId, CREATE_CONNECTION_TIMEOUT);
+        var locked = rwLocks.writeLock(remoteLocalId, CREATE_CONNECTION_TIMEOUT_MS);
 
         if(locked && !connectionTable.containsKey(remoteLocalId)) {
             try {
@@ -429,7 +428,7 @@ public class DynamicConnectionManager {
                 LOGGER.debug("Active reliable connections: {}", connectionTable.entrySet().toArray().length);
 
                 try {
-                    Thread.sleep(RC_TIMEOUT);
+                    Thread.sleep(RC_TIMEOUT_MS);
                 } catch (InterruptedException e) {
                     interrupt();
                 }
