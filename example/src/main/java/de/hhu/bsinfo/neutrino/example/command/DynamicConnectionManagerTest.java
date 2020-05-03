@@ -71,7 +71,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     @CommandLine.Option(
             names = { "-m", "--mode" },
-            description = "Sets test mode:\n0 -> Throughput\n1 -> Latency")
+            description = "Sets test mode:\n0 -> Throughput\n1 -> Connect Latency\n2 -> Execute Latency")
     private int mode = DEFAULT_MODE;
 
     @CommandLine.Option(
@@ -101,6 +101,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             result = benchmarkThroughput(remoteLocalIds);
         } else if(mode == 1) {
             result = benchmarkConnectLatency(remoteLocalIds);
+        } else if(mode == 2) {
+            result = benchmarkExecuteLatency(remoteLocalIds);
         }
 
 
@@ -184,6 +186,43 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         if(connectLatencies.length > 0) {
             measurement.addLatencyMeasurement("Create Connection", connectLatencies);
+        }
+
+        return measurement;
+    }
+
+    private LatencyMeasurement benchmarkExecuteLatency(short ... remoteLocalIds) {
+
+        var dummyLatency = new AtomicLong(0);
+
+        dcm.activateExecuteLatencyMeasurement();
+
+        executor.setPoolSize(remoteLocalIds.length * threadCount);
+
+        barrier = new CyclicBarrier(remoteLocalIds.length * threadCount);
+
+        var workloads = new WorkloadLatency[remoteLocalIds.length];
+
+        for (short remoteLid : remoteLocalIds) {
+            statistics.registerRemote(remoteLid);
+            for(int i = 0; i < threadCount; i++) {
+                executor.submit(new WorkloadThroughput(data, 0, remoteLid, dummyLatency));
+            }
+        }
+
+        long expectedOperationCount = (long) threadCount * iterations * remoteLocalIds.length;
+
+        while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {}
+
+        long totalBytes = statistics.getTotalRDMABytesWritten();
+        long operationCount = statistics.getTotalRDMAWriteCount();
+        var operationSize = totalBytes / operationCount;
+        var executeLatencies = statistics.getExecuteLatencies();
+
+        var measurement = new LatencyMeasurement(operationCount, operationSize);
+
+        if(executeLatencies.length > 0) {
+            measurement.addLatencyMeasurement("Execute", executeLatencies);
         }
 
         return measurement;

@@ -5,9 +5,11 @@ import org.jctools.maps.NonBlockingHashMapLong;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class StatisticManager {
+    public final AtomicLong executeIdProvider = new AtomicLong(1);
 
     private final NonBlockingHashMapLong<RequestStatistic> requestStatisticMap = new NonBlockingHashMapLong<>();
     private final NonBlockingHashMapLong<LatencyStatistic> connectLatencyStatisticMap = new NonBlockingHashMapLong<>();
+    private final NonBlockingHashMapLong<LatencyStatistic> executeLatencyStatisticMap = new NonBlockingHashMapLong<>();
 
     public void registerRemote(short remoteLocalId) {
         requestStatisticMap.putIfAbsent(remoteLocalId, new RequestStatistic(remoteLocalId));
@@ -24,6 +26,19 @@ public class StatisticManager {
 
     public void endConnectLatencyStatistic(long id, long endTime) {
        connectLatencyStatisticMap.get(id).endTime = endTime;
+    }
+
+    public void startExecuteLatencyStatistic(long id, long startTime) {
+
+        var statistic = new LatencyStatistic();
+        statistic.id = id;
+        statistic.startTime = startTime;
+
+        executeLatencyStatisticMap.putIfAbsent(id, statistic);
+    }
+
+    public void endExecuteLatencyStatistic(long id, long endTime) {
+        executeLatencyStatisticMap.get(id).endTime = endTime;
     }
 
     public void putSendEvent(short remoteLocalId, long bytesSend) {
@@ -180,6 +195,21 @@ public class StatisticManager {
 
     public long[] getConnectLatencies() {
         var data = connectLatencyStatisticMap.values();
+        long[] latencies = new long[data.size()];
+
+        int idx = 0;
+
+        for(var statistic : data) {
+            latencies[idx] = statistic.endTime - statistic.startTime;
+
+            idx++;
+        }
+
+        return latencies;
+    }
+
+    public long[] getExecuteLatencies() {
+        var data = executeLatencyStatisticMap.values();
         long[] latencies = new long[data.size()];
 
         int idx = 0;

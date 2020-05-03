@@ -61,6 +61,9 @@ public class DynamicConnectionManager {
     private final RCCompletionQueuePollThread rcCompletionPoller;
     private final RCDisconnectorThread rcDisconnector;
 
+    // might impact throughput!
+    private boolean executeLatencyMeasurement = false;
+
     private final int portUDP;
 
     protected final StatisticManager statisticManager;
@@ -123,6 +126,13 @@ public class DynamicConnectionManager {
         boolean connected = false;
         ReliableConnection connection = null;
 
+        long startTime = 0;
+        long endTime = 0;
+
+        if(executeLatencyMeasurement) {
+            startTime = System.nanoTime();
+        }
+
         while (!connected) {
             if(!connectionTable.containsKey(remoteLocalId)) {
                 var start = System.nanoTime();
@@ -141,6 +151,14 @@ public class DynamicConnectionManager {
         }
 
         rcUsageTable.setUsed(remoteLocalId);
+
+        if(executeLatencyMeasurement) {
+            endTime = System.nanoTime();
+
+            var id = statisticManager.executeIdProvider.getAndIncrement();
+            statisticManager.startExecuteLatencyStatistic(id, startTime);
+            statisticManager.endExecuteLatencyStatistic(id, endTime);
+        }
 
         connection.execute(data, opCode, offset, length, remoteBuffer.getAddress(), remoteBuffer.getRemoteKey(), 0);
 
@@ -242,6 +260,14 @@ public class DynamicConnectionManager {
 
     public short[] getRemoteLocalIds() {
         return dch.getRemoteLocalIds();
+    }
+
+    public void activateExecuteLatencyMeasurement() {
+        executeLatencyMeasurement = true;
+    }
+
+    public void disableExecuteLatencyMeasurement() {
+        executeLatencyMeasurement = false;
     }
 
     public void printRCInfos() {
