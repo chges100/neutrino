@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 public class DynamicConnectionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManager.class);
 
-    private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 500;
+    private static final int RC_COMPLETION_QUEUE_POLL_BATCH_SIZE = 200;
 
     private static final long RC_TIMEOUT = 2000;
 
@@ -33,7 +33,7 @@ public class DynamicConnectionManager {
     private static final long CREATE_CONNECTION_TIMEOUT = 100;
     private static final long REMOTE_EXEC_PARK_TIME = 1000;
 
-    private static final int RC_COMPLETION_QUEUE_SIZE = 3000;
+    private static final int RC_MIN_COMPLETION_QUEUE_SIZE = 400;
     private static final int RC_QUEUE_PAIR_SIZE = 100;
 
     private final short localId;
@@ -86,7 +86,7 @@ public class DynamicConnectionManager {
             throw new IOException("Could not initialize any Infiniband device");
         }
 
-        completionQueue = deviceContexts.get(0).getContext().createCompletionQueue(RC_COMPLETION_QUEUE_SIZE);
+        completionQueue = deviceContexts.get(0).getContext().createCompletionQueue(RC_MIN_COMPLETION_QUEUE_SIZE);
         if(completionQueue == null) {
             throw new IOException("Cannot create completion queue");
         }
@@ -160,7 +160,6 @@ public class DynamicConnectionManager {
             try {
                 statisticManager.registerRemote(remoteLocalId);
 
-
                 var connection = new ReliableConnection(deviceContexts.get(0), RC_QUEUE_PAIR_SIZE, RC_QUEUE_PAIR_SIZE, completionQueue, completionQueue);
                 connection.init();
                 connectionTable.put(remoteLocalId, connection);
@@ -171,6 +170,12 @@ public class DynamicConnectionManager {
                 dch.initConnectionRequest(localQP, remoteLocalId);
 
                 createdConnection = true;
+
+                // resize Completion Queue According to RC Count
+                var rcCount = connectionTable.keySet().size();
+                if(completionQueue.getMaxElements() < RC_MIN_COMPLETION_QUEUE_SIZE + 2 * rcCount * RC_QUEUE_PAIR_SIZE) {
+                    completionQueue.resize(RC_MIN_COMPLETION_QUEUE_SIZE + 2 * rcCount * RC_QUEUE_PAIR_SIZE);
+                }
 
                 rcUsageTable.setUsed(remoteLocalId);
             } catch (IOException e) {
@@ -421,7 +426,7 @@ public class DynamicConnectionManager {
                     }
                 }
 
-                LOGGER.debug("Cound RC: {}", connectionTable.entrySet().toArray().length);
+                LOGGER.debug("Active reliable connections: {}", connectionTable.entrySet().toArray().length);
 
                 try {
                     Thread.sleep(RC_TIMEOUT);
