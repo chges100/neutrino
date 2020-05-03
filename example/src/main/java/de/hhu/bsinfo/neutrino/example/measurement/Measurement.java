@@ -11,15 +11,15 @@ public abstract class Measurement implements Cloneable {
     protected final long operationSize;
 
     protected final long nodes;
-    protected final long threadsPerNode;
+    protected final long threadsPerRemote;
     protected final long timestampMs;
     protected final long localId;
 
     protected long totalData;
 
-    Measurement(long nodes, long threadsPerNode, long localId, long operationCount, long operationSize) {
+    Measurement(long nodes, long threadsPerRemote, long localId, long operationCount, long operationSize) {
         this.nodes = nodes;
-        this.threadsPerNode = threadsPerNode;
+        this.threadsPerRemote = threadsPerRemote;
         this.localId = localId;
         this.operationCount = operationCount;
         this.operationSize = operationSize;

@@ -18,8 +18,8 @@ public class LatencyMeasurement extends Measurement {
     private final String unit = "ns";
     private final String measurementType = "latency";
 
-    public LatencyMeasurement(long nodes, long threadsPerNode, long localId, long operationCount, long operationSize) {
-        super(nodes, threadsPerNode, localId, operationCount, operationSize);
+    public LatencyMeasurement(long nodes, long threadsPerRemote, long localId, long operationCount, long operationSize) {
+        super(nodes, threadsPerRemote, localId, operationCount, operationSize);
     }
 
     public void addLatencyMeasurement(String name, long ... latencies) {
@@ -93,7 +93,7 @@ public class LatencyMeasurement extends Measurement {
 
             json.put("measurementType", measurementType);
             json.put("nodes", nodes);
-            json.put("threadsPerNode", threadsPerNode);
+            json.put("threadsPerRemote", threadsPerRemote);
             json.put("timestamp", timestampMs);
             json.put("localId", localId);
 
@@ -113,7 +113,7 @@ public class LatencyMeasurement extends Measurement {
 
             var currentDir = System.getProperty("user.dir");
 
-            var file = new File(currentDir + "/measurements/" + measurementType + "/" + name +"/measurement_localId" + localId + "_n" + nodes + "_t" + threadsPerNode + "_" + System.currentTimeMillis() + ".json");
+            var file = new File(currentDir + "/measurements/" + measurementType + "/" + name +"/measurement_localId" + localId + "_n" + nodes + "_t" + threadsPerRemote + "_" + System.currentTimeMillis() + ".json");
             file.getParentFile().mkdirs();
 
             var fileWriter = new FileWriter(file);
