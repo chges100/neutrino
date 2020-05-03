@@ -1,19 +1,31 @@
 package de.hhu.bsinfo.neutrino.example.measurement;
 
+import java.io.IOException;
+
 /**
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
  **/
 public abstract class Measurement implements Cloneable {
 
-    private final long operationCount;
-    private final long operationSize;
+    protected final long operationCount;
+    protected final long operationSize;
 
-    private long totalData;
+    protected final long nodes;
+    protected final long threadsPerNode;
+    protected final long timestampMs;
+    protected final long localId;
 
-    Measurement(long operationCount, long operationSize) {
+    protected long totalData;
+
+    Measurement(long nodes, long threadsPerNode, long localId, long operationCount, long operationSize) {
+        this.nodes = nodes;
+        this.threadsPerNode = threadsPerNode;
+        this.localId = localId;
         this.operationCount = operationCount;
         this.operationSize = operationSize;
         totalData = (long) operationCount * (long) operationSize;
+
+        timestampMs = System.currentTimeMillis();
     }
 
     public long getOperationCount() {
@@ -42,4 +54,6 @@ public abstract class Measurement implements Cloneable {
             ",\n\t" + ValueFormatter.formatValue("totalData", totalData, "Byte") +
             "\n}";
     }
+
+    public abstract void toJSON() throws IOException;
 }

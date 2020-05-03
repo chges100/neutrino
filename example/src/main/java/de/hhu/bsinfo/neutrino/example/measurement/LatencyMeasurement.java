@@ -1,7 +1,12 @@
 package de.hhu.bsinfo.neutrino.example.measurement;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
@@ -10,8 +15,11 @@ public class LatencyMeasurement extends Measurement {
 
     private final HashMap<String, LatencyStatistics> latencyMap = new HashMap<>();
 
-    public LatencyMeasurement(long operationCount, long operationSize) {
-        super(operationCount, operationSize);
+    private final String unit = "ns";
+    private final String measurementType = "latency";
+
+    public LatencyMeasurement(long nodes, long threadsPerNode, long localId, long operationCount, long operationSize) {
+        super(nodes, threadsPerNode, localId, operationCount, operationSize);
     }
 
     public void addLatencyMeasurement(String name, long ... latencies) {
@@ -73,5 +81,43 @@ public class LatencyMeasurement extends Measurement {
         ret += "\n}";
 
         return ret;
+    }
+
+    @Override
+    public void toJSON() throws IOException {
+        for(var entry : latencyMap.entrySet()) {
+            var name = entry.getKey();
+            var latency = entry.getValue();
+
+            JSONObject json = new JSONObject();
+
+            json.put("measurementType", measurementType);
+            json.put("nodes", nodes);
+            json.put("threadsPerNode", threadsPerNode);
+            json.put("timestamp", timestampMs);
+            json.put("localId", localId);
+
+            JSONObject jsonMeasurement = new JSONObject();
+            jsonMeasurement.put("operationSize", operationSize);
+            jsonMeasurement.put("operationCount", operationCount);
+            jsonMeasurement.put("timeUnit", unit);
+            jsonMeasurement.put("latencies", new JSONArray(latency.getLatencies()));
+            jsonMeasurement.put("avgLatency", latency.getAvgNs());
+            jsonMeasurement.put("maxLatency", latency.getMaxNs());
+            jsonMeasurement.put("minLatency", latency.getMinNs());
+            jsonMeasurement.put("numLatencies", latency.getLatencyCount());
+            jsonMeasurement.put("totalData", totalData);
+
+            json.put("measurement", jsonMeasurement);
+
+            var currentDir = System.getProperty("user.dir");
+
+            var file = new File(currentDir + "/measurements/" + measurementType + "/" + name +"/measurement_localId" + localId + "_n" + nodes + "_t" + threadsPerNode + "_" + System.currentTimeMillis() + ".json");
+            file.getParentFile().mkdirs();
+
+            var fileWriter = new FileWriter(file);
+            fileWriter.write(json.toString());
+            fileWriter.close();
+        }
     }
 }

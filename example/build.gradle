@@ -66,6 +66,7 @@ dependencies {
     implementation 'info.picocli:picocli:3.9.6'
     implementation 'org.agrona:agrona:1.4.1'
     implementation 'org.threadly:threadly:6.1'
+    implementation 'org.json:json:20190722'
 
     testImplementation 'com.greghaskins:spectrum:1.2.0'
     testImplementation 'org.assertj:assertj-core:3.12.2'

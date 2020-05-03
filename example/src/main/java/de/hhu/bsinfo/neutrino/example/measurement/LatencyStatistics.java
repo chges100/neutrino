@@ -65,6 +65,10 @@ class LatencyStatistics {
         return times.length;
     }
 
+    long[] getLatencies() {
+        return times.clone();
+    }
+
     /**
      * Get the average time in ns.
      *

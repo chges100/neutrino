@@ -7,7 +7,6 @@ import de.hhu.bsinfo.neutrino.data.NativeString;
 import de.hhu.bsinfo.neutrino.example.measurement.LatencyMeasurement;
 import de.hhu.bsinfo.neutrino.example.measurement.Measurement;
 import de.hhu.bsinfo.neutrino.example.measurement.ThroughputMeasurement;
-import org.agrona.collections.ArrayUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -16,7 +15,7 @@ import org.threadly.concurrent.*;
 import java.util.Arrays;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.LongStream;
+
 
 
 @CommandLine.Command(
@@ -29,7 +28,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DynamicConnectionManagerTest.class);
 
     private static final int DEFAULT_SERVER_PORT = 2998;
-    private static final int DEFAULT_BUFFER_SIZE = 2*1024*1024;
+    private static final int DEFAULT_BUFFER_SIZE = 1024*1024;
     private static final int DEFAULT_DEVICE_ID = 0;
     private static final int DEFAULT_ITERATIONS = 40;
     private static final int DEFAULT_THREAD_COUNT = 2;
@@ -116,6 +115,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         dcm.shutdown();
         data.close();
 
+        result.toJSON();
+
         LOGGER.info(result.toString());
 
         return null;
@@ -152,7 +153,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var time = endTime.get() - startTime.get();
 
-        var measurement = new ThroughputMeasurement(operationCount, operationSize);
+        var measurement = new ThroughputMeasurement(remoteLocalIds.length + 1, threadCount, dcm.getLocalId(), operationCount, operationSize);
         measurement.setMeasuredTime(time);
 
         return measurement;
@@ -182,10 +183,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var operationSize = totalBytes / operationCount;
         var connectLatencies = statistics.getConnectLatencies();
 
-        var measurement = new LatencyMeasurement(operationCount, operationSize);
+        var measurement = new LatencyMeasurement(remoteLocalIds.length + 1, threadCount, dcm.getLocalId(), operationCount, operationSize);
 
         if(connectLatencies.length > 0) {
-            measurement.addLatencyMeasurement("Create Connection", connectLatencies);
+            measurement.addLatencyMeasurement("connect", connectLatencies);
         }
 
         return measurement;
@@ -219,10 +220,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var operationSize = totalBytes / operationCount;
         var executeLatencies = statistics.getExecuteLatencies();
 
-        var measurement = new LatencyMeasurement(operationCount, operationSize);
+        var measurement = new LatencyMeasurement(remoteLocalIds.length + 1, threadCount, dcm.getLocalId(), operationCount, operationSize);
 
         if(executeLatencies.length > 0) {
-            measurement.addLatencyMeasurement("Execute", executeLatencies);
+            measurement.addLatencyMeasurement("execute", executeLatencies);
         }
 
         return measurement;

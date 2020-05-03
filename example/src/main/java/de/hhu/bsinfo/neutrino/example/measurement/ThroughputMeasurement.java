@@ -1,5 +1,11 @@
 package de.hhu.bsinfo.neutrino.example.measurement;
 
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+
 /**
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
  **/
@@ -9,8 +15,11 @@ public class ThroughputMeasurement extends Measurement {
     private double operationThroughput;
     private double dataThroughput;
 
-    public ThroughputMeasurement(long operationCount, long operationSize) {
-        super(operationCount, operationSize);
+    private final String measurementType = "throughput";
+    private final String unit = "bytes";
+
+    public ThroughputMeasurement(long nodes, long threadsPerNode, long localId, long operationCount, long operationSize) {
+        super(nodes, threadsPerNode, localId, operationCount, operationSize);
     }
 
     public double getTotalTime() {
@@ -54,5 +63,36 @@ public class ThroughputMeasurement extends Measurement {
             ",\n\t" + ValueFormatter.formatValue("operationThroughput", operationThroughput, "Operations/s") +
             ",\n\t" + ValueFormatter.formatValue("dataThroughput", dataThroughput, "Byte/s") +
             "\n}";
+    }
+
+    @Override
+    public void toJSON() throws IOException {
+        JSONObject json = new JSONObject();
+
+        json.put("measurementType", measurementType);
+        json.put("nodes", nodes);
+        json.put("threadsPerNode", threadsPerNode);
+        json.put("timestamp", timestampMs);
+        json.put("localId", localId);
+
+        JSONObject jsonMeasurement = new JSONObject();
+        jsonMeasurement.put("totalTimeInSeconds", totalTime);
+        jsonMeasurement.put("operationSize", operationSize);
+        jsonMeasurement.put("operationCount", operationCount);
+        jsonMeasurement.put("operationThroughput", operationThroughput);
+        jsonMeasurement.put("dataThroughput", dataThroughput);
+        jsonMeasurement.put("dataUnit", unit);
+        jsonMeasurement.put("totalData", totalData);
+
+        json.put("measurement", jsonMeasurement);
+
+        var currentDir = System.getProperty("user.dir");
+
+        var file = new File(currentDir + "/measurements/" + measurementType + "/measurement_localId" + localId + "_n" + nodes + "_t" + threadsPerNode + "_" + System.currentTimeMillis() + ".json");
+        file.getParentFile().mkdirs();
+
+        var fileWriter = new FileWriter(file);
+        fileWriter.write(json.toString());
+        fileWriter.close();
     }
 }
