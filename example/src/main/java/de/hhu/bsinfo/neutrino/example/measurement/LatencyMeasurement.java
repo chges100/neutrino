@@ -107,6 +107,7 @@ public class LatencyMeasurement extends Measurement {
             jsonMeasurement.put("minLatency", latency.getMinNs());
             jsonMeasurement.put("numLatencies", latency.getLatencyCount());
             jsonMeasurement.put("totalData", totalData);
+            jsonMeasurement.put("latencyType", name);
 
             json.put("measurement", jsonMeasurement);
 
