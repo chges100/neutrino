@@ -443,11 +443,11 @@ public class DynamicConnectionManager {
         public void run() {
             while (isRunning) {
 
-                for(var remoteLid : connectionTable.keySet()) {
-                    var used = rcUsageTable.getStatusAndReset((int) (long) remoteLid);
+                for(var remoteLocalId : connectionTable.keySet()) {
+                    var used = rcUsageTable.getStatusAndReset((int) (long) remoteLocalId);
 
                     if(used == 0) {
-                        dch.initDisconnectRequest(localId,  (short) (long) remoteLid);
+                        dch.initDisconnectRequest(localId,  (short) (long) remoteLocalId);
                     }
                 }
 

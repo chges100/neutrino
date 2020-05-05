@@ -134,10 +134,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var workloads = new WorkloadThroughput[remoteLocalIds.length];
 
-        for (short remoteLid : remoteLocalIds) {
-            statistics.registerRemote(remoteLid);
+        for (short remoteLocalId : remoteLocalIds) {
+            statistics.registerRemote(remoteLocalId);
             for(int i = 0; i < threadCount; i++) {
-                executor.submit(new WorkloadThroughput(data, 0, remoteLid, startTime));
+                executor.submit(new WorkloadThroughput(data, 0, remoteLocalId, startTime));
             }
         }
 
@@ -167,10 +167,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var workloads = new WorkloadLatency[remoteLocalIds.length];
 
-        for (short remoteLid : remoteLocalIds) {
-            statistics.registerRemote(remoteLid);
+        for (short remoteLocalId : remoteLocalIds) {
+            statistics.registerRemote(remoteLocalId);
             for(int i = 0; i < threadCount; i++) {
-                executor.submit(new WorkloadLatency(data, remoteLid, sleepInterval));
+                executor.submit(new WorkloadLatency(data, remoteLocalId, sleepInterval));
             }
         }
 
@@ -204,10 +204,10 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var workloads = new WorkloadLatency[remoteLocalIds.length];
 
-        for (short remoteLid : remoteLocalIds) {
-            statistics.registerRemote(remoteLid);
+        for (short remoteLocalId : remoteLocalIds) {
+            statistics.registerRemote(remoteLocalId);
             for(int i = 0; i < threadCount; i++) {
-                executor.submit(new WorkloadThroughput(data, 0, remoteLid, dummyLatency));
+                executor.submit(new WorkloadThroughput(data, 0, remoteLocalId, dummyLatency));
             }
         }
 
