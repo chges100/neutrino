@@ -10,7 +10,7 @@ import java.util.HashMap;
 
 /**
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
- **/
+ */
 public class LatencyMeasurement extends Measurement {
 
     private final HashMap<String, LatencyStatistics> latencyMap = new HashMap<>();

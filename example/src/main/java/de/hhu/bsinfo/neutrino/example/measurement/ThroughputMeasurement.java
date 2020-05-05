@@ -8,7 +8,7 @@ import java.io.IOException;
 
 /**
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
- **/
+ */
 public class ThroughputMeasurement extends Measurement {
 
     private double totalTime;

@@ -4,7 +4,7 @@ import java.io.IOException;
 
 /**
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
- **/
+ */
 public abstract class Measurement implements Cloneable {
 
     protected final long operationCount;
