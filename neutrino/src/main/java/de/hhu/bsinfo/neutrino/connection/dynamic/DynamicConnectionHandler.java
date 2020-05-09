@@ -344,10 +344,8 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             while (!connected) {
                 if (!dcm.connectionTable.containsKey(remoteLocalId)) {
-                    var start = System.nanoTime();
 
                     dcm.createConnection(remoteLocalId);
-
                 }
 
                 dcm.rwLocks.readLock(remoteLocalId);
