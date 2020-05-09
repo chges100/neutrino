@@ -553,8 +553,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
                         isReceived = true;
                     // error occured sending the message
                     } else if(value == RCHandshakeQueue.SEND_ERROR) {
-                        // try to send message again
-                        internalSend(message.getByteBuffer(), 0, message.getNativeSize());
+                        LOGGER.error("Error sending handshake message");
                     }
                 } catch (Exception e) {
                     LOGGER.trace("Exception accured during polling: {}", e);
