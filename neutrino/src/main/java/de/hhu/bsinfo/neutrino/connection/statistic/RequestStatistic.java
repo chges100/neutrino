@@ -1,9 +1,5 @@
 package de.hhu.bsinfo.neutrino.connection.statistic;
 
-import de.hhu.bsinfo.neutrino.util.Poolable;
-import de.hhu.bsinfo.neutrino.verbs.SendWorkRequest;
-import org.agrona.collections.Long2LongCounterMap;
-
 import java.util.concurrent.atomic.AtomicLong;
 
 public class RequestStatistic {

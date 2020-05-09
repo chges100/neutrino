@@ -1,8 +1,6 @@
 package de.hhu.bsinfo.neutrino.connection.dynamic;
 
 import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
-import org.agrona.collections.Int2IntHashMap;
-import org.agrona.collections.Int2ObjectHashMap;
 import org.jctools.maps.NonBlockingHashMapLong;
 
 public class RemoteBufferHandler {

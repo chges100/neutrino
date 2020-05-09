@@ -2,28 +2,22 @@ package de.hhu.bsinfo.neutrino.connection.dynamic;
 
 import de.hhu.bsinfo.neutrino.buffer.BufferInformation;
 import de.hhu.bsinfo.neutrino.buffer.LocalBuffer;
-import de.hhu.bsinfo.neutrino.buffer.RemoteBuffer;
 import de.hhu.bsinfo.neutrino.connection.DeviceContext;
 import de.hhu.bsinfo.neutrino.connection.UnreliableDatagram;
 import de.hhu.bsinfo.neutrino.connection.message.LocalMessage;
 import de.hhu.bsinfo.neutrino.connection.message.Message;
 import de.hhu.bsinfo.neutrino.connection.message.MessageType;
-import de.hhu.bsinfo.neutrino.connection.util.ConcurrentRingBufferPool;
 import de.hhu.bsinfo.neutrino.connection.util.RCInformation;
 import de.hhu.bsinfo.neutrino.connection.util.SGEProvider;
 import de.hhu.bsinfo.neutrino.connection.util.UDInformation;
 import de.hhu.bsinfo.neutrino.util.NativeObjectRegistry;
-import de.hhu.bsinfo.neutrino.util.Poolable;
 import de.hhu.bsinfo.neutrino.verbs.*;
-import org.agrona.collections.Int2ObjectHashMap;
 import org.jctools.maps.NonBlockingHashMapLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -47,7 +41,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final long RESP_DISCONNECT_FORCE_RESP_TIMEOUT_MS = 400;
 
     private final DynamicConnectionManager dcm;
-    private final Int2ObjectHashMap<UDInformation> remoteHandlerTables = new Int2ObjectHashMap<>();
+    private final NonBlockingHashMapLong<UDInformation> remoteHandlerTables = new NonBlockingHashMapLong<>();
     private final RegisteredHandlerTable registeredHandlerTable;
 
 
