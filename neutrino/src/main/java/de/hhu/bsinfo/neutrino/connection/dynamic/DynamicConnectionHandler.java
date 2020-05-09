@@ -41,7 +41,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     private static final long RESP_DISCONNECT_FORCE_RESP_TIMEOUT_MS = 400;
 
     private final DynamicConnectionManager dcm;
-    private final NonBlockingHashMapLong<UDInformation> remoteHandlerTables = new NonBlockingHashMapLong<>();
+    private final NonBlockingHashMapLong<UDInformation> remoteHandlerTable = new NonBlockingHashMapLong<>();
     private final RegisteredHandlerTable registeredHandlerTable;
 
 
@@ -87,26 +87,26 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
     }
 
     protected void registerRemoteConnectionHandler(int remoteLocalId, UDInformation remoteHandlerInfo) {
-        remoteHandlerTables.put(remoteLocalId, remoteHandlerInfo);
+        remoteHandlerTable.put(remoteLocalId, remoteHandlerInfo);
 
         registeredHandlerTable.setRegistered(remoteLocalId);
     }
 
     protected UDInformation getRemoteHandlerInfo(int remoteLocalId) {
-        return remoteHandlerTables.get(remoteLocalId);
+        return remoteHandlerTable.get(remoteLocalId);
     }
 
     protected boolean hasRemoteHandlerInfo(int remoteLocalId) {
-        return remoteHandlerTables.containsKey(remoteLocalId);
+        return remoteHandlerTable.containsKey(remoteLocalId);
     }
 
     protected short[] getRemoteLocalIds() {
-        var n = remoteHandlerTables.size();
-        var remotes = remoteHandlerTables.keySet().toArray();
+        var n = remoteHandlerTable.size();
+        var remotes = remoteHandlerTable.keySet().toArray();
         short[] lids = new short[n];
 
         for(int i = 0; i < lids.length; i++) {
-            lids[i] =  (short) (int) remotes[i];
+            lids[i] =  (short) (long) remotes[i];
         }
 
         return lids;
@@ -119,7 +119,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         // poll until remote UD pair data is available
         registeredHandlerTable.poll(remoteLocalId);
 
-        sendMessage(MessageType.HANDLER_REQ_CONNECTION, remoteHandlerTables.get(remoteLocalId), localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber());
+        sendMessage(MessageType.HANDLER_REQ_CONNECTION, remoteHandlerTable.get(remoteLocalId), localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber());
 
         dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_REQ_CONNECTION, remoteLocalId, localQP.getPortNumber(), localQP.getLocalId(), localQP.getQueuePairNumber()));
         LOGGER.info("Initiate new reliable connection to {}", remoteLocalId);
@@ -336,7 +336,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             var remoteInfo = new RCInformation((byte) payload[0], (short) payload[1], (int) payload[2]);
             var remoteLocalId = remoteInfo.getLocalId();
 
-            sendMessage(MessageType.HANDLER_RESP_CONNECTION_REQ, remoteHandlerTables.get(remoteLocalId), dcm.getLocalId());
+            sendMessage(MessageType.HANDLER_RESP_CONNECTION_REQ, remoteHandlerTable.get(remoteLocalId), dcm.getLocalId());
 
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
@@ -401,7 +401,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 if(locked) {
                     if(dcm.rcUsageTable.getStatus(remoteLocalId) == RCUsageTable.RC_UNSUSED) {
 
-                        sendMessage(MessageType.HANDLER_REQ_DISCONNECT, remoteHandlerTables.get(remoteLocalId), dcm.getLocalId());
+                        sendMessage(MessageType.HANDLER_REQ_DISCONNECT, remoteHandlerTable.get(remoteLocalId), dcm.getLocalId());
 
                         var connection = dcm.connectionTable.get(remoteLocalId);
 
@@ -516,7 +516,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             while (!bufferAck) {
                 var msgId = Message.provideGlobalId();
 
-                sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+                sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
 
                 remoteStatus.waitForResponse(remoteStatus.buffer, RESP_BUFFER_ACK_TIMEOUT_MS);
 
@@ -537,7 +537,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 if(remoteStatus.connectAck.get()) {
                     connectionAck = true;
                 } else {
-                    sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+                    sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
                 }
             }
         }
@@ -557,7 +557,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     LOGGER.debug("GOT lock: can start disconnect from {}", remoteLocalId);
                     var msgId = Message.provideGlobalId();
 
-                    sendMessage(MessageType.HANDLER_REQ_DISCONNECT, remoteHandlerTables.get(remoteLocalId), dcm.getLocalId());
+                    sendMessage(MessageType.HANDLER_REQ_DISCONNECT, remoteHandlerTable.get(remoteLocalId), dcm.getLocalId());
 
                     LOGGER.info("Wait for answer to disconnect request {}", remoteLocalId);
 
@@ -600,7 +600,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             if(connection != null) {
 
-                sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+                sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
 
                 try {
                     connection.disconnect();
@@ -616,7 +616,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         private void handleBufferResponse() {
-            sendMessage(msgType, remoteHandlerTables.get(remoteLocalId), payload);
+            sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
         }
     }
 

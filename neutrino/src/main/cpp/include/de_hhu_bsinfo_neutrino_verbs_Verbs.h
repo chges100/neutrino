@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 #undef de_hhu_bsinfo_neutrino_verbs_Verbs_DEFAULT_POOL_SIZE
-#define de_hhu_bsinfo_neutrino_verbs_Verbs_DEFAULT_POOL_SIZE 1024L
+#define de_hhu_bsinfo_neutrino_verbs_Verbs_DEFAULT_POOL_SIZE 2048L
 /*
  * Class:     de_hhu_bsinfo_neutrino_verbs_Verbs
  * Method:    getOperationFlagCreate

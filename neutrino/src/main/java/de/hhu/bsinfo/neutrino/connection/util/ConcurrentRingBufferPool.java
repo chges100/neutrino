@@ -28,6 +28,8 @@ public class ConcurrentRingBufferPool<T extends Poolable> extends Pool<T> {
     @Override
     @SuppressWarnings("unchecked")
     public void returnInstance(Poolable instance) {
-        buffer.push((T) instance);
+        if(!buffer.push((T) instance)) {
+            instance.releaseInstance();
+        }
     }
 }

@@ -10,7 +10,7 @@ import java.util.Map;
 
 public final class Verbs {
 
-    private static final int DEFAULT_POOL_SIZE = 1024;
+    private static final int DEFAULT_POOL_SIZE = 2048;
 
     @SuppressWarnings("FieldNamingConvention")
     private static final Map<Class<? extends Poolable>, ConcurrentRingBufferPool<Poolable>> poolMap = new HashMap<>();

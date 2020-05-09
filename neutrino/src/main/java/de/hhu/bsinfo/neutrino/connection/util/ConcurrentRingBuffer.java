@@ -32,10 +32,14 @@ public class ConcurrentRingBuffer<T> {
         return buffer.capacity() - buffer.size() == 0;
     }
 
-    public void push(final T object) {
+    public boolean push(final T object) {
         if(!isFull()) {
             buffer.offer(object);
+
+            return true;
         }
+
+        return false;
     }
 
     public T pop() {
