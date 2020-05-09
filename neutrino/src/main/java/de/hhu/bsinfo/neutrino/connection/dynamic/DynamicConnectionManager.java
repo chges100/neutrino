@@ -135,7 +135,6 @@ public class DynamicConnectionManager {
 
         while (!connected) {
             if(!connectionTable.containsKey(remoteLocalId)) {
-                var start = System.nanoTime();
                 createConnection(remoteLocalId);
             }
 
