@@ -587,7 +587,7 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
             // set remote local id
             remoteLocalId.getAndSet(INVALID_LID);
 
-            // init and reset queue pair
+            // reset and init queue pair
             reset();
             init();
 
@@ -599,6 +599,8 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
         } else {
             // if handshake fails, connection should not be disconnected
             LOGGER.info("Did not disconnect connection {}", id);
+
+            isConnected.set(true);
 
             return false;
         }
