@@ -249,8 +249,6 @@ public class DynamicConnectionManager {
 
         dch.close();
         LOGGER.info("DCH is closed");
-
-        printLocalBufferInfos();
     }
 
     public short getLocalId() {

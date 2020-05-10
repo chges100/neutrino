@@ -17,9 +17,12 @@ public class ThroughputMeasurement extends Measurement {
 
     private final String measurementType = "throughput";
     private final String unit = "bytes";
+    private final String mode;
 
-    public ThroughputMeasurement(long nodes, long threadsPerRemote, long localId, long operationCount, long operationSize) {
+    public ThroughputMeasurement(long nodes, long threadsPerRemote, long localId, long operationCount, long operationSize, String mode) {
         super(nodes, threadsPerRemote, localId, operationCount, operationSize);
+
+        this.mode = mode;
     }
 
     public double getTotalTime() {
@@ -55,8 +58,11 @@ public class ThroughputMeasurement extends Measurement {
 
     @Override
     public String toString() {
-        return "ThroughputMeasurement {" +
-            "\n\t" + ValueFormatter.formatValue("operationCount", getOperationCount()) +
+        return "ThroughputMeasurement " + mode  + " {" +
+            "\n\t" + ValueFormatter.formatValue("locadId", localId) +
+            ",\n\t" + ValueFormatter.formatValue("nodes", nodes) +
+            ",\n\t" + ValueFormatter.formatValue("threadsPerRemote", threadsPerRemote) +
+            ",\n\t" + ValueFormatter.formatValue("operationCount", getOperationCount()) +
             ",\n\t" + ValueFormatter.formatValue("operationSize", getOperationSize(), "Byte") +
             ",\n\t" + ValueFormatter.formatValue("totalData", getTotalData(), "Byte") +
             ",\n\t" + ValueFormatter.formatValue("totalTime", totalTime, "s") +
@@ -69,7 +75,7 @@ public class ThroughputMeasurement extends Measurement {
     public void toJSON() throws IOException {
         JSONObject json = new JSONObject();
 
-        json.put("measurementType", measurementType);
+        json.put("measurementType", measurementType + mode);
         json.put("nodes", nodes);
         json.put("threadsPerRemote", threadsPerRemote);
         json.put("timestamp", timestampMs);

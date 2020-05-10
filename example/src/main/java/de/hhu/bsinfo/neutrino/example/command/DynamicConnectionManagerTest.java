@@ -70,7 +70,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     @CommandLine.Option(
             names = { "-m", "--mode" },
-            description = "Sets test mode:\n0 -> Throughput\n1 -> Connect Latency\n2 -> Execute Latency")
+            description = "Sets test mode:\n0 -> Write Throughput\n1 -> Write Throughput\n2 -> Connect Latency\n3 -> Execute Latency")
     private int mode = DEFAULT_MODE;
 
     @CommandLine.Option(
@@ -97,10 +97,12 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         Measurement result = null;
 
         if(mode == 0) {
-            result = benchmarkThroughput(remoteLocalIds);
+            result = benchmarkThroughput("Write", remoteLocalIds);
         } else if(mode == 1) {
-            result = benchmarkConnectLatency(remoteLocalIds);
+            result = benchmarkThroughput("Read", remoteLocalIds);
         } else if(mode == 2) {
+            result = benchmarkConnectLatency(remoteLocalIds);
+        } else if(mode == 3) {
             result = benchmarkExecuteLatency(remoteLocalIds);
         }
 
@@ -123,7 +125,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     }
 
-    private ThroughputMeasurement benchmarkThroughput(short ... remoteLocalIds) {
+    private ThroughputMeasurement benchmarkThroughput(String throughputMode, short ... remoteLocalIds) {
 
         var startTime = new AtomicLong(0);
         var endTime = new AtomicLong(0);
@@ -143,17 +145,31 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         long expectedOperationCount = (long) threadCount * iterations * remoteLocalIds.length;
 
-        while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {}
+        if(mode == 0) {
+            while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {}
+        } else if(mode == 1) {
+            while (expectedOperationCount > statistics.getTotalRDMAReadCount()) {}
+        }
+
 
         endTime.set(System.nanoTime());
 
-        long totalBytes = statistics.getTotalRDMABytesWritten();
-        long operationCount = statistics.getTotalRDMAWriteCount();
+        long totalBytes = 0;
+        long operationCount = 0;
+
+        if(mode == 0) {
+            totalBytes = statistics.getTotalRDMABytesWritten();
+            operationCount = statistics.getTotalRDMAWriteCount();
+        } else if(mode == 1) {
+            totalBytes = statistics.getTotalRDMABytesRead();
+            operationCount = statistics.getTotalRDMAReadCount();
+        }
+
         var operationSize = totalBytes / operationCount;
 
         var time = endTime.get() - startTime.get();
 
-        var measurement = new ThroughputMeasurement(remoteLocalIds.length + 1, threadCount, dcm.getLocalId(), operationCount, operationSize);
+        var measurement = new ThroughputMeasurement(remoteLocalIds.length + 1, threadCount, dcm.getLocalId(), operationCount, operationSize, throughputMode);
         measurement.setMeasuredTime(time);
 
         return measurement;
@@ -255,15 +271,23 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
                 barrier.await();
 
-                LOGGER.info("START REMOTE WRITE ON {}", remoteLocalId);
+                LOGGER.info("START REMOTE OPERATION ON {}", remoteLocalId);
 
                 timeStamp.compareAndSet(0, System.nanoTime());
 
-                for(int i = 0; i < iterations; i++) {
-                    dcm.remoteWrite(data, offset, bufferSize, remoteBuffer, remoteLocalId);
+                if(mode == 0) {
+                    for(int i = 0; i < iterations; i++) {
+                        dcm.remoteWrite(data, offset, bufferSize, remoteBuffer, remoteLocalId);
+                    }
+                } else if(mode == 1) {
+                    for(int i = 0; i < iterations; i++) {
+                        dcm.remoteRead(data, offset, bufferSize, remoteBuffer, remoteLocalId);
+                    }
                 }
 
-                LOGGER.info("FINISHED REMOTE WRITE ON {}", remoteLocalId);
+
+
+                LOGGER.info("FINISHED REMOTE OPERATION ON {}", remoteLocalId);
 
             } catch (Exception e) {
                 LOGGER.error("Could not complete workload on {}", remoteLocalId);

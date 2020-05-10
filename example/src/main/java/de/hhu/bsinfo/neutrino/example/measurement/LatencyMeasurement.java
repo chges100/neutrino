@@ -55,8 +55,10 @@ public class LatencyMeasurement extends Measurement {
     @Override
     public String toString() {
         var ret = "LatencyMeasurement {";
-
-        ret += "\n\t" + ValueFormatter.formatValue("operationCount", getOperationCount());
+        ret += "\n\t" + ValueFormatter.formatValue("locadId", localId);
+        ret += ",\n\t" + ValueFormatter.formatValue("nodes", nodes);
+        ret += ",\n\t" + ValueFormatter.formatValue("threadsPerRemote", threadsPerRemote) ;
+        ret += ",\n\t" + ValueFormatter.formatValue("operationCount", getOperationCount());
         ret += ",\n\t" + ValueFormatter.formatValue("operationSize", getOperationSize(), "Byte");
         ret += ",\n\t" + ValueFormatter.formatValue("totalData", getTotalData(), "Byte");
 
