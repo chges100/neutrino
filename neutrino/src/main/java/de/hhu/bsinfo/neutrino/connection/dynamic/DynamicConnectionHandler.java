@@ -512,7 +512,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             }
 
             while (!bufferAck) {
-                var msgId = Message.provideGlobalId();
 
                 sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
 
@@ -553,7 +552,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
                 if(locked) {
                     LOGGER.debug("GOT lock: can start disconnect from {}", remoteLocalId);
-                    var msgId = Message.provideGlobalId();
 
                     sendMessage(MessageType.HANDLER_REQ_DISCONNECT, remoteHandlerTable.get(remoteLocalId), dcm.getLocalId());
 
