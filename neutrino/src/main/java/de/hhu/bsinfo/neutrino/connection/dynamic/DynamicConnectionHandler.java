@@ -450,7 +450,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
             if(connection != null) {
                 try {
-                    connection.disconnect();
+                    connection.forceDisconnect();
                     connection.close();
 
                     dcm.connectionTable.remove(remoteLocalId);
@@ -601,7 +601,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
 
                 try {
-                    connection.disconnect();
+                    connection.forceDisconnect();
                     connection.close();
 
                     dcm.connectionTable.remove(remoteLocalId);

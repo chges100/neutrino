@@ -489,9 +489,27 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
      */
     public void resetFromError() throws IOException {
         if(queuePair.getState() == QueuePair.State.ERR) {
+            isConnected.set(false);
+            changeConnection.set(false);
+
             reset();
             init();
         }
+    }
+
+    /**
+     * Forces a disconnect - use with care! Can have side effects since conenction is resetted without handshake
+     *
+     * @throws IOException
+     */
+    public void forceDisconnect() throws IOException {
+        isConnected.set(false);
+
+        reset();
+        init();
+
+        changeConnection.set(false);
+
     }
 
     /**
