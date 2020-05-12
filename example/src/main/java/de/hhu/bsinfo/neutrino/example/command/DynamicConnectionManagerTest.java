@@ -275,7 +275,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
                 timeStamp.compareAndSet(0, System.nanoTime());
 
-                if(mode == 0) {
+                if(mode == 0 || mode == 3) {
                     for(int i = 0; i < iterations; i++) {
                         dcm.remoteWrite(data, offset, bufferSize, remoteBuffer, remoteLocalId);
                     }
