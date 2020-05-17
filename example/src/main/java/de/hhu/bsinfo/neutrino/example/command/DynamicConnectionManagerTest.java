@@ -90,7 +90,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         var string = new NativeString(data, 0, bufferSize);
         string.set("Node " + dcm.getLocalId());
 
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.SECONDS.sleep(4);
 
         var remoteLocalIds = dcm.getRemoteLocalIds();
 
@@ -120,6 +120,8 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         result.toJSON();
 
         LOGGER.info(result.toString());
+
+        LOGGER.debug("FINISHED BENCHMARK with local id {}", dcm.getLocalId());
 
         return null;
 
