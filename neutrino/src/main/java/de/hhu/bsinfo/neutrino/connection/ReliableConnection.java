@@ -519,8 +519,8 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
      *
      * @param msgType   the message type to be used for handshake (connect/disconnect)
      * @param timeOutMs   the timeout for the handshake in milliseconds
-     * @return
-     * @throws IOException
+     * @return indicator if handshake was successful
+     * @throws IOException exception if error occured
      */
     private boolean handshake(MessageType msgType, long timeOutMs) throws IOException {
         LOGGER.trace("Handshake of connection {} with message {} started", getId(), msgType);
@@ -589,6 +589,9 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
 
     /**
      * Disconnects from remote queue pair and transforms into init state.
+     *
+     * @return indicator if disconnect was successful
+     * @throws IOException exception if error occured
      **/
     @Override
     public boolean disconnect() throws IOException{
@@ -882,11 +885,12 @@ public class ReliableConnection extends QPSocket implements Connectable<RCInform
             return this;
         }
 
-        @Override
+
         /**
          * Releases the instance into the pool for later use.
          * Resets all parameters.
          */
+        @Override
         public void releaseInstance() {
             sendWorkRequest = null;
             receiveWorkRequest = null;
