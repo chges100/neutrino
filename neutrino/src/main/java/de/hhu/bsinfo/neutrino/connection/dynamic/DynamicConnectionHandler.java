@@ -151,11 +151,6 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         LOGGER.trace("Send responst to connection request to {}", remoteLocalId);
     }
 
-    protected void sendDisconnectResponse(short localId, long response, short remoteLocalId) {
-        dcm.executor.execute(new OutgoingMessageHandler(MessageType.HANDLER_RESP_DISCONNECT_REQ, remoteLocalId, localId, response));
-        LOGGER.trace("Send disconnect request to {}", remoteLocalId);
-    }
-
     protected long sendMessage(MessageType msgType, UDInformation remoteInfo, long ... payload) {
         var msgId = Message.provideGlobalId();
 
