@@ -73,11 +73,6 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             description = "Sets test mode:\n0 -> Write Throughput\n1 -> Write Throughput\n2 -> Connect Latency\n3 -> Execute Latency")
     private int mode = DEFAULT_MODE;
 
-    @CommandLine.Option(
-            names = { "-s", "--sleepinterval" },
-            description = "Sets default sleep interval for latency test")
-    private int sleepInterval = DEFAULT_SLEEP_INTERVAL;
-
     @Override
     public Void call() throws Exception {
 
@@ -188,7 +183,7 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         for (short remoteLocalId : remoteLocalIds) {
             statistics.registerRemote(remoteLocalId);
             for(int i = 0; i < threadCount; i++) {
-                executor.submit(new WorkloadLatency(data, remoteLocalId, sleepInterval));
+                executor.submit(new WorkloadLatency(data, remoteLocalId, DEFAULT_SLEEP_INTERVAL));
             }
         }
 
