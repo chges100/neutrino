@@ -93,6 +93,11 @@ public class UDInformation {
         return queuePairKey;
     }
 
+    /**
+     * Gets content of information as string
+     *
+     * @return string containing the information
+     */
     @Override
     public String toString() {
         return new StringJoiner(", ", UDInformation.class.getSimpleName() + "[", "]")
