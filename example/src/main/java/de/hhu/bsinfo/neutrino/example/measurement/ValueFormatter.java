@@ -1,7 +1,10 @@
 package de.hhu.bsinfo.neutrino.example.measurement;
 
 /**
+ * Helper to format numeric values.
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
+ *
+ * @author Fabian Ruhland
  **/
 public class ValueFormatter {
 

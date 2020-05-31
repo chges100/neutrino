@@ -9,19 +9,47 @@ import java.io.IOException;
 import java.util.HashMap;
 
 /**
+ * Represents measurement of latencies.
  * Originally imported from de.hhu.bsinfo.observatory.benchmark.result
+ *
+ * @author edited by Christian Gesse
  */
 public class LatencyMeasurement extends Measurement {
 
+    /**
+     * Hashmap conatining all latency statistics by name
+     * Names are used to differentiate between different latency types
+     */
     private final HashMap<String, LatencyStatistics> latencyMap = new HashMap<>();
 
+    /**
+     * Time unit for measurements
+     */
     private final String unit = "ns";
+    /**
+     * Type of measurement
+     */
     private final String measurementType = "latency";
 
+    /**
+     * Instantiates a new Latency measurement.
+     *
+     * @param nodes            the number nodes
+     * @param threadsPerRemote the threads per remote
+     * @param localId          the local id
+     * @param operationCount   the operation count
+     * @param operationSize    the operation size in bytes
+     */
     public LatencyMeasurement(long nodes, long threadsPerRemote, long localId, long operationCount, long operationSize) {
         super(nodes, threadsPerRemote, localId, operationCount, operationSize);
     }
 
+    /**
+     * Add one latency measurement to latency statistic
+     *
+     * @param name      the type of the latency
+     * @param latencies the latencies as long array
+     */
     public void addLatencyMeasurement(String name, long ... latencies) {
         var latencyStatistics = new LatencyStatistics();
 
@@ -31,27 +59,62 @@ public class LatencyMeasurement extends Measurement {
         latencyMap.put(name, latencyStatistics);
     }
 
+    /**
+     * Gets average latency for one latency type
+     *
+     * @param name the name of the latency
+     * @return the average latency
+     */
     public double getAverageLatency(String name) {
         return latencyMap.get(name).getAvgNs() / 1000000000;
     }
 
+    /**
+     * Gets minimum latency for one latency type
+     *
+     * @param name the name of the latency
+     * @return the minimum latency
+     */
     public double getMinimumLatency(String name) {
         return latencyMap.get(name).getMinNs() / 1000000000;
     }
 
+    /**
+     * Gets maximum latency for one latency type
+     *
+     * @param name the name of the latency
+     * @return the maximum latency
+     */
     public double getMaximumLatency(String name) {
         return latencyMap.get(name).getMaxNs() / 1000000000;
     }
 
+    /**
+     * Gets percentile latency for one latency type
+     *
+     * @param name       the name of the latency
+     * @param percentile the percentile
+     * @return the percentile latency
+     */
     public double getPercentileLatency(String name, float percentile) {
         return latencyMap.get(name).getPercentilesNs(percentile) / 1000000000;
     }
 
+    /**
+     * Overwritten since there is no use for this measurement type
+     *
+     * @return constant 0
+     */
     @Override
     public double getTotalTime() {
         return 0;
     }
 
+    /**
+     * Builds string with measurement data and information
+     *
+     * @return string with measurement data
+     */
     @Override
     public String toString() {
         var ret = "LatencyMeasurement {";
@@ -85,6 +148,11 @@ public class LatencyMeasurement extends Measurement {
         return ret;
     }
 
+    /**
+     * Saves measurement data into JSON File
+     *
+     * @throws IOException if file handling goes wrong
+     */
     @Override
     public void toJSON() throws IOException {
         for(var entry : latencyMap.entrySet()) {
