@@ -173,15 +173,25 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
     }
 
+    /**
+     * Start measurement of throughput
+     *
+     * @param throughputMode    Read/Write
+     * @param remoteLocalIds    list with local ids of remote nodes
+     * @return                  result of measurement
+     */
     private ThroughputMeasurement benchmarkThroughput(String throughputMode, short ... remoteLocalIds) {
 
+        // times for measurement
         var startTime = new AtomicLong(0);
         var endTime = new AtomicLong(0);
 
+        // set up thread pool
         executor.setPoolSize(remoteLocalIds.length * threadCount);
-
+        // set up barrier for workloads
         barrier = new CyclicBarrier(remoteLocalIds.length * threadCount);
 
+        // create workload threads
         var workloads = new WorkloadThroughput[remoteLocalIds.length];
 
         for (short remoteLocalId : remoteLocalIds) {
@@ -191,17 +201,19 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             }
         }
 
+        // calculate expected amount of rdma operations in this benchmark
         long expectedOperationCount = (long) threadCount * iterations * remoteLocalIds.length;
 
+        // wait until all rdma operations are completed
         if(mode == 0) {
             while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {}
         } else if(mode == 1) {
             while (expectedOperationCount > statistics.getTotalRDMAReadCount()) {}
         }
 
-
         endTime.set(System.nanoTime());
 
+        // get results of measurement
         long totalBytes = 0;
         long operationCount = 0;
 
@@ -217,18 +229,27 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
 
         var time = endTime.get() - startTime.get();
 
+        // create measurement result
         var measurement = new ThroughputMeasurement(remoteLocalIds.length + 1, threadCount, dcm.getLocalId(), operationCount, operationSize, throughputMode);
         measurement.setMeasuredTime(time);
 
         return measurement;
     }
 
+    /**
+     * Start measurement of connect latencies
+     *
+     * @param remoteLocalIds    list of local ids of remote nodes
+     * @return                  result of latency measurement
+     */
     private LatencyMeasurement benchmarkConnectLatency(short ... remoteLocalIds) {
 
+        // set up thread pool
         executor.setPoolSize(remoteLocalIds.length * threadCount);
-
+        // set up barrier for workloads
         barrier = new CyclicBarrier(remoteLocalIds.length * threadCount);
 
+        // create workload threads
         var workloads = new WorkloadLatency[remoteLocalIds.length];
 
         for (short remoteLocalId : remoteLocalIds) {
@@ -238,15 +259,19 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             }
         }
 
+        // calculate expected amount of rdma operations in this benchmark
         long expectedOperationCount = (long) threadCount * iterations * remoteLocalIds.length;
 
+        // wait until all rdma operations are completed
         while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {}
 
+        // get results of measurement
         long totalBytes = statistics.getTotalRDMABytesWritten();
         long operationCount = statistics.getTotalRDMAWriteCount();
         var operationSize = totalBytes / operationCount;
         var connectLatencies = statistics.getConnectLatencies();
 
+        // create measurement result
         var measurement = new LatencyMeasurement(remoteLocalIds.length + 1, threadCount, dcm.getLocalId(), operationCount, operationSize);
 
         if(connectLatencies.length > 0) {
@@ -256,16 +281,26 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         return measurement;
     }
 
+    /**
+     * Start measurement of execute latencies
+     *
+     * @param remoteLocalIds   list of local ids of remote nodes
+     * @return                 result of measurement
+     */
     private LatencyMeasurement benchmarkExecuteLatency(short ... remoteLocalIds) {
 
+        // need a dummy latency because we use throughput workers
         var dummyLatency = new AtomicLong(0);
-
+        // activate latency measurement for each execute operation
+        // might impact performance of throughput
         dcm.activateExecuteLatencyMeasurement();
 
+        // set up thread pool
         executor.setPoolSize(remoteLocalIds.length * threadCount);
-
+        // set up barrier for workloads
         barrier = new CyclicBarrier(remoteLocalIds.length * threadCount);
 
+        // create workload threads
         var workloads = new WorkloadLatency[remoteLocalIds.length];
 
         for (short remoteLocalId : remoteLocalIds) {
@@ -275,15 +310,19 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             }
         }
 
+        // calculate expected amount of rdma operations in this benchmark
         long expectedOperationCount = (long) threadCount * iterations * remoteLocalIds.length;
 
+        // wait until all rdma operations are completed
         while (expectedOperationCount > statistics.getTotalRDMAWriteCount()) {}
 
+        // get results of measurement
         long totalBytes = statistics.getTotalRDMABytesWritten();
         long operationCount = statistics.getTotalRDMAWriteCount();
         var operationSize = totalBytes / operationCount;
         var executeLatencies = statistics.getExecuteLatencies();
 
+        // create measurement result
         var measurement = new LatencyMeasurement(remoteLocalIds.length + 1, threadCount, dcm.getLocalId(), operationCount, operationSize);
 
         if(executeLatencies.length > 0) {
@@ -293,20 +332,37 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         return measurement;
     }
 
-
+    /**
+     * Workload thread to create throughput on InfiniBand devices using RDMA read or write
+     *
+     * @author Christian Gesse
+     */
     private class WorkloadThroughput implements Runnable {
+
+        /**
+         * buffer that holds data for RDMA
+         */
         private RegisteredBuffer data;
+        /**
+         * offset into buffer
+         */
         private long offset;
+        /**
+         * local id of remote node
+         */
         private short remoteLocalId;
+        /**
+         * atomic time stamp for start of benchmark
+         */
         private AtomicLong timeStamp;
 
         /**
-         * Instantiates a new Workload throughput.
+         * Instantiates a new throughput workload
          *
-         * @param data          the data
-         * @param offset        the offset
-         * @param remoteLocalId the remote local id
-         * @param timeStamp     the time stamp
+         * @param data          buffer containing the data
+         * @param offset        the offset into the buffer
+         * @param remoteLocalId the local id of the remote node
+         * @param timeStamp     atomic time stamp
          */
         public WorkloadThroughput(RegisteredBuffer data, long offset, short remoteLocalId, AtomicLong timeStamp) {
             this.data = data;
@@ -315,22 +371,30 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
             this.timeStamp = timeStamp;
         }
 
+        /**
+         * Run method of the thread
+         */
         @Override
         public void run() {
 
             try {
+                // get information about rdma buffer on remote
                 var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
 
+                // if buffer is not available, wait
                 if(remoteBuffer == null) {
                     TimeUnit.MILLISECONDS.sleep(500);
                 }
 
+                // wait for other workload threads to reach this point
                 barrier.await();
 
                 LOGGER.info("START REMOTE OPERATION ON {}", remoteLocalId);
 
+                // if start time was not set yet, do it
                 timeStamp.compareAndSet(0, System.nanoTime());
 
+                // execute all RDMA operations
                 if(mode == 0 || mode == 3) {
                     for(int i = 0; i < iterations; i++) {
                         dcm.remoteWrite(data, offset, bufferSize, remoteBuffer, remoteLocalId);
@@ -352,36 +416,57 @@ public class DynamicConnectionManagerTest implements Callable<Void> {
         }
     }
 
+    /**
+     * Workload thread that forces the dynamic connections to connect and disconnect in iterations
+     *
+     * @author Christian Gesse
+     */
     private class WorkloadLatency implements Runnable {
+        /**
+         * buffer that holds data for RDMA
+         */
         private RegisteredBuffer data;
+        /**
+         * local id of remote node
+         */
         private short remoteLocalId;
+        /**
+         * time to sleep between iterations
+         */
         private long sleepTimeMs;
 
         /**
-         * Instantiates a new Workload latency.
+         * Instantiates a new latency workload
          *
-         * @param data          the data
-         * @param remoteLocalId the remote local id
-         * @param sleetTimeMs   the sleet time ms
+         * @param data          the buffer containing the data
+         * @param remoteLocalId the local id of the remote node
+         * @param sleepTimeMs   the sleep time in ms
          */
-        public WorkloadLatency(RegisteredBuffer data, short remoteLocalId, long sleetTimeMs) {
+        public WorkloadLatency(RegisteredBuffer data, short remoteLocalId, long sleepTimeMs) {
             this.data = data;
             this.remoteLocalId = remoteLocalId;
-            this.sleepTimeMs = sleetTimeMs;
+            this.sleepTimeMs = sleepTimeMs;
         }
 
+        /**
+         * Run method of the thread
+         */
         @Override
         public void run() {
 
             try {
+                // get the information about the remote buffer
                 var remoteBuffer = dcm.getRemoteBuffer(remoteLocalId);
 
+                // if no information available, waoit
                 if(remoteBuffer == null) {
                     TimeUnit.MILLISECONDS.sleep(500);
                 }
 
                 LOGGER.info("START LATENCY TEST TO REMOTE {}", remoteLocalId);
 
+                // execute one RDMA operation and wait
+                // this forces the connection management to establish a new connection each time if sleeptime is long enough
                 for(int i = 0; i < iterations; i++) {
                     barrier.await();
                     dcm.remoteWrite(data, 0, bufferSize, remoteBuffer, remoteLocalId);
