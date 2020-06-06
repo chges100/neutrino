@@ -553,7 +553,7 @@ public class DynamicConnectionManager {
                 var bytes = workRequestMapElement.scatterGatherElement.getLength();
                 var byteCount = completion.getByteCount();
 
-                // acknowledge send completions since they are used for handshake of connections
+                // acknowledge send completions since they are used to prevent overflow of queue pairs
                 // and release work request information into buffer pool
                 if(opCode.getValue() < 128) {
                     connection.acknowledgeSendCompletion();

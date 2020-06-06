@@ -403,94 +403,121 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                 receiveMessage();
             }
 
+            // create new work completion array
             var workCompletions = new CompletionQueue.WorkCompletionArray(batchSize);
 
+            // start polling
             while(isRunning) {
-
+                // poll a batch of send work completions
                 sendCompletionQueue.poll(workCompletions);
 
+                // process send work completions
                 for(int i = 0; i < workCompletions.getLength(); i++) {
                     var completion = workCompletions.get(i);
 
+                    // acknowledge send completion to queue pair
                     acknowledgeSendCompletion();
 
                     if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
                         LOGGER.error("Work completion failes with error [{}]: {}", completion.getStatus(), completion.getStatusMessage());
                     }
 
+                    // extract scatter gather element and return it to provider
                     var sge = (ScatterGatherElement) NativeObjectRegistry.getObject(sendWorkRequests[(int) completion.getId()].getListHandle());
                     sendSGEProvider.returnSGE(sge);
 
+                    // release work completion into buffer pool
                     sendWorkRequests[(int) completion.getId()].releaseInstance();
                     sendWorkRequests[(int) completion.getId()] = null;
                 }
 
+                // poll batch of receive completions
                 receiveCompletionQueue.poll(workCompletions);
 
+                // process receive work completions
                 for(int i = 0; i < workCompletions.getLength(); i++) {
                     var completion = workCompletions.get(i);
 
+                    // acknowledge receive completion to queue pair
                     acknowledgeReceiveCompletion();
 
                     if(completion.getStatus() != WorkCompletion.Status.SUCCESS) {
                         LOGGER.error("Work completion failes with error [{}]: {}", completion.getStatus(), completion.getStatusMessage());
                     }
 
+                    // extract scatter gather element
                     var sge = (ScatterGatherElement) NativeObjectRegistry.getObject(receiveWorkRequests[(int) completion.getId()].getListHandle());
-
+                    // extract buffer address and received message at this address
                     var message = new LocalMessage(LocalBuffer.wrap(sge.getAddress(), sge.getLength()), UnreliableDatagram.UD_Receive_Offset);
 
+                    // process received message asynchronously
                     try {
                         dcm.executor.execute(new IncomingMessageHandler(message.getMessageType(), message.getId(), message.getPayload()));
                     } catch (RejectedExecutionException e) {
                         LOGGER.error("Executing task failed with exception: {}", e);
                     }
 
+                    // return sge to provider
                     receiveSGEProvider.returnSGE(sge);
 
+                    // return work request into buffer pool
                     receiveWorkRequests[(int) completion.getId()].releaseInstance();
                     receiveWorkRequests[(int) completion.getId()] = null;
                 }
 
-                // Fill up receive queue of dch
+                // Fill up receive queue of dch to be ready to receive new messages
                 while (receiveQueueFillCount.get() < MAX_RECEIVE_WORK_REQUESTS) {
                     receiveMessage();
                 }
             }
 
+            // if main loop breaks, the thread is killed
             killed = true;
 
         }
 
         /**
-         * Shutdown.
+         * Shutdown poll thread.
          */
         public void shutdown() {
             isRunning = false;
         }
 
         /**
-         * Is killed boolean.
+         * Check if poll thread is killed.
          *
-         * @return the boolean
+         * @return the boolean indicating the status
          */
         public boolean isKilled() {
             return killed;
         }
     }
 
-
+    /**
+     * Handler for an received message. Is executed by a thread pool executor.
+     *
+     * @author Christian Gesse
+     */
     private class IncomingMessageHandler implements Runnable {
+        /**
+         * The type of the received message
+         */
         private final MessageType msgType;
+        /**
+         * The id of the received message
+         */
         private final long msgId;
+        /**
+         * The payload of the received message
+         */
         private final long[] payload;
 
         /**
          * Instantiates a new Incoming message handler.
          *
-         * @param msgType the msg type
-         * @param msgId   the msg id
-         * @param payload the payload
+         * @param msgType the message type
+         * @param msgId   the message id
+         * @param payload the payload of the message
          */
         IncomingMessageHandler(MessageType msgType, long msgId, long... payload) {
             this.msgType = msgType;
@@ -498,8 +525,13 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             this.msgId = msgId;
         }
 
+        /**
+         * Run method.
+         */
         @Override
         public void run() {
+
+            // switch between the different message types and handle message
             switch(msgType) {
                 case HANDLER_REQ_CONNECTION:
                     handleConnectionRequest();
@@ -526,76 +558,105 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         }
 
+        /**
+         * Handle a connection request.
+         */
         private void handleConnectionRequest() {
-
+            // extract information about remote node from payload
             var remoteInfo = new RCInformation((byte) payload[0], (short) payload[1], (int) payload[2]);
             var remoteLocalId = remoteInfo.getLocalId();
 
+            // send a response
             sendMessage(MessageType.HANDLER_RESP_CONNECTION_REQ, remoteHandlerTable.get(remoteLocalId), dcm.getLocalId());
 
             LOGGER.info("Got new connection request from {}", remoteInfo.getLocalId());
 
             boolean connected = false;
 
+            // begin connecting process
             while (!connected) {
+                // if necessary, create new queue pair for connection
                 if (!dcm.connectionTable.containsKey(remoteLocalId)) {
-
                     dcm.createConnection(remoteLocalId);
                 }
 
+                // obtain read lock
                 dcm.rwLocks.readLock(remoteLocalId);
                 var connection = dcm.connectionTable.get(remoteLocalId);
 
+                // try to connect the queue pair to the remote one
                 try {
+                    // returns boolean if a queue pair is connected or not
                     connected = connection.connect(remoteInfo);
+                    // set time for latency measurement
                     dcm.statisticManager.endConnectLatencyStatistic(connection.getId(), System.nanoTime());
                 } catch (Exception e) {
                     LOGGER.info("Could not connect to remote {}\n{}", remoteLocalId, e);
                 } finally {
+                    // release read lock
                     dcm.rwLocks.unlockRead(remoteLocalId);
                 }
             }
         }
 
+        /**
+         * Handle a RDMA buffer information,
+         */
         private void handleBufferInfo() {
+            // extract remote buffer information from payload
             var bufferInfo = new BufferInformation(payload[1], payload[2], (int) payload[3]);
             var remoteLocalId = (short) payload[0];
 
             LOGGER.trace("Received new remote buffer information from {}: {}", remoteLocalId, bufferInfo);
 
+            // register remote buffer for later use
             dcm.remoteBufferHandler.registerBufferInfo(remoteLocalId, bufferInfo);
-
+            // acknowledge the buffer information
             sendBufferAck(dcm.getLocalId(), remoteLocalId);
         }
 
+        /**
+         * Handle acknowledgement of buffer information
+         */
         private void handleBufferAck() {
+            // extract local id of remote node
             var remoteLocalId = (short) payload[0];
 
+            // change state of remoteStatus object
             if(remoteStatusMap.containsKey(remoteLocalId)) {
                 var remoteStatus = remoteStatusMap.get(remoteLocalId);
 
+                // amark buffer as acknowledged and wake up wating threads
                 remoteStatus.bufferAck.set(true);
                 remoteStatus.signalAll(remoteStatus.buffer);
             }
         }
 
+        /**
+         * Handle a disconnect request.
+         */
         private void handleDisconnectRequest() {
+            // extract local id of remote node
             var remoteLocalId = (int) payload[0];
             LOGGER.info("Received disconnect request from {}", remoteLocalId);
 
+            // get the state of the remote node
             var remoteStatus = remoteStatusMap.get(remoteLocalId);
 
+            // Begin disconnect if possible
             if(remoteStatus == null) {
                 LOGGER.error("No remote status for {}", remoteLocalId);
             } else if(dcm.rcUsageTable.getStatus(remoteLocalId) == RCUsageTable.RC_UNSUSED && remoteStatus.disconnectAck.compareAndSet(RemoteStatus.DISCONNECT_NONE, RemoteStatus.DISCONNECT_ACCEPT)) {
-
+                // try to obtain exclusive write lock
                 var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
-
+                // if successful and connection is unused, begin disconnect
                 if(locked) {
                     if(dcm.rcUsageTable.getStatus(remoteLocalId) == RCUsageTable.RC_UNSUSED) {
 
+                        // send a disconnect request as response
                         sendMessage(MessageType.HANDLER_REQ_DISCONNECT, remoteHandlerTable.get(remoteLocalId), dcm.getLocalId());
 
+                        // disconnect the connection
                         var connection = dcm.connectionTable.get(remoteLocalId);
 
                         if(connection != null && connection.isConnected()) {
@@ -603,6 +664,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                                 LOGGER.info("Disconnect from {}", remoteLocalId);
                                 var disconnected = connection.disconnect();
 
+                                // close queue pair if disconnected succesfully
                                 if(disconnected) {
                                     connection.close();
                                     dcm.connectionTable.remove(remoteLocalId);
@@ -614,20 +676,27 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                         }
 
                     }
+                    // release write lock
                     dcm.rwLocks.unlockWrite(remoteLocalId);
                 }
-
+                // reset remote status regarding disconnect
                 remoteStatus.disconnectAck.set(RemoteStatus.DISCONNECT_NONE);
 
             } else if(remoteStatus.disconnectAck.compareAndSet(RemoteStatus.DISCONNECT_REQ, RemoteStatus.DISCONNECT_ACCEPT)) {
+                // if another thread is already trying to disconnect, wakre up this thread
                 LOGGER.info("Disconnect request from {} already pending - wake other thread", remoteLocalId);
                 remoteStatus.signalAll(remoteStatus.disconnect);
             }
         }
 
+        /**
+         * Handle response to connection request.
+         */
         private void handleConnectionResponse() {
+            // extract local id of remote node
             var remoteLocalId = (short) payload[0];
 
+            // change remote status and wake up waiting threads
             if(remoteStatusMap.containsKey(remoteLocalId)) {
                 var remoteStatus = remoteStatusMap.get(remoteLocalId);
 
@@ -636,13 +705,19 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             }
         }
 
+        /**
+         * Handle a disconnect force.
+         */
         private void handleDisconnectForce() {
+            // extract local id of remote node
             var remoteLocalId = (short) payload[0];
             LOGGER.info("Got disconnect request from {}", remoteLocalId);
 
+            // obtain write lock
             dcm.rwLocks.writeLock(remoteLocalId);
             var connection = dcm.connectionTable.get(remoteLocalId);
 
+            // disconnect connection without further messaging
             if(connection != null) {
                 try {
                     connection.forceDisconnect();
@@ -653,22 +728,34 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     LOGGER.info("Disconnecting of connection {} failed: {}", connection.getId(), e);
                 }
             }
-
+            // release the exclusive write lock
             dcm.rwLocks.unlockWrite(remoteLocalId);
         }
     }
 
+    /**
+     * Handler for outgoing messages
+     */
     private class OutgoingMessageHandler implements Runnable {
+        /**
+         * The type of the message
+         */
         private final MessageType msgType;
+        /**
+         * The payload of the message
+         */
         private final long[] payload;
+        /**
+         * The local id of the remote node
+         */
         private final short remoteLocalId;
 
         /**
          * Instantiates a new Outgoing message handler.
          *
-         * @param msgType       the msg type
-         * @param remoteLocalId the remote local id
-         * @param payload       the payload
+         * @param msgType       the message type
+         * @param remoteLocalId the local id of the remote node
+         * @param payload       the payload of the message
          */
         OutgoingMessageHandler(MessageType msgType, short remoteLocalId, long ... payload) {
             this.msgType = msgType;
@@ -676,12 +763,16 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             this.remoteLocalId = remoteLocalId;
         }
 
+        /**
+         * Run method of the thread.
+         */
         @Override
         public void run() {
 
             // poll until remote UD pair data is available
             registeredHandlerTable.poll(remoteLocalId);
 
+            // switch between message types and handle message
             switch(msgType) {
                 case HANDLER_SEND_BUFFER_INFO:
                     handleBufferInfo();
@@ -704,19 +795,25 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             }
         }
 
+        /**
+         * Handle a RDMA buffer information.
+         */
         private void handleBufferInfo() {
 
             boolean bufferAck = false;
 
+            // create new remote status if necessary
             var remoteStatus = remoteStatusMap.putIfAbsent(remoteLocalId, new RemoteStatus());
             if(remoteStatus == null) {
                 remoteStatus = remoteStatusMap.get(remoteLocalId);
             }
 
+            // send buffer information until it is acknowledged by remote node
             while (!bufferAck) {
-
+                // send message to remote
                 sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
 
+                // wait for acknowledgement
                 remoteStatus.waitForResponse(remoteStatus.buffer, RESP_BUFFER_ACK_TIMEOUT_MS);
 
                 bufferAck = remoteStatus.bufferAck.get();
@@ -724,15 +821,21 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
         }
 
+        /**
+         * Handle a conection request
+         */
         private void handleConnectionRequest() {
             boolean connectionAck = false;
 
             var remoteStatus = remoteStatusMap.get(remoteLocalId);
 
+            // send connection request until it is acknowledged by remote node
             while (!connectionAck) {
 
+                // wait for acknowledgement (one message was sent before this handler was started)
                 remoteStatus.waitForResponse(remoteStatus.connect, RESP_CONNECTION_REQ_TIMEOUT_MS);
 
+                // check remote status and send new connection request if necessary
                 if(remoteStatus.connectAck.get()) {
                     connectionAck = true;
                 } else {
@@ -741,28 +844,33 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             }
         }
 
+        /**
+         * Handle disconnect request.
+         */
         private void handleDisconnectRequest() {
             LOGGER.info("Begin disconnect request to {}", remoteLocalId);
 
             var remoteStatus = remoteStatusMap.get(remoteLocalId);
 
+            // check if no other handler is trying to disconnect
             if(remoteStatus == null) {
                 LOGGER.error("No remote status for {}" , remoteLocalId);
             } else if(remoteStatus.disconnectAck.compareAndSet(RemoteStatus.DISCONNECT_NONE, RemoteStatus.DISCONNECT_REQ)) {
-
+                // obtain exclusive write lock
                 var locked = dcm.rwLocks.tryWriteLock(remoteLocalId);
 
                 if(locked) {
-                    LOGGER.debug("GOT lock: can start disconnect from {}", remoteLocalId);
 
+                    // send disconnect request to remote
                     sendMessage(MessageType.HANDLER_REQ_DISCONNECT, remoteHandlerTable.get(remoteLocalId), dcm.getLocalId());
 
-                    LOGGER.info("Wait for answer to disconnect request {}", remoteLocalId);
-
+                    // wait for a disconnect request as response from remote node
                     remoteStatus.waitForResponse(remoteStatus.disconnect, RESP_CONNECTION_REQ_TIMEOUT_MS);
 
+                    // check if response was received
                     if(remoteStatus.disconnectAck.get() == RemoteStatus.DISCONNECT_ACCEPT) {
-                        LOGGER.info("DISCONNECt accepted: {}" ,remoteLocalId);
+
+                        // continue disconnecting and close queue pair
                         var connection = dcm.connectionTable.get(remoteLocalId);
 
                         if(connection != null && connection.isConnected()) {
@@ -780,7 +888,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
 
                         }
                     }
-
+                    // relesa write lock
                     dcm.rwLocks.unlockWrite(remoteLocalId);
                 }
 
@@ -791,15 +899,20 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
             }
         }
 
+        /**
+         * Handle a disconnect force.
+         */
         private void handleDisconnectForce() {
 
+            // obtain exclusive write lock
             dcm.rwLocks.writeLock(remoteLocalId);
             var connection = dcm.connectionTable.get(remoteLocalId);
 
             if(connection != null) {
-
+                // send disconnect force message to remote node
                 sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
 
+                // disconnect and close queue pair without further waiting
                 try {
                     connection.forceDisconnect();
                     connection.close();
@@ -810,64 +923,73 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
                     LOGGER.info("Disconnecting of connection {} failed: {}", connection.getId(), e);
                 }
             }
+            // release write lock
             dcm.rwLocks.unlockWrite(remoteLocalId);
         }
 
+        /**
+         * Handle a buffer response.
+         */
         private void handleBufferResponse() {
             sendMessage(msgType, remoteHandlerTable.get(remoteLocalId), payload);
         }
     }
 
+    /**
+     * Status object for a remote node. Is used to store some information about the state of remote nodes.
+     *
+     * @author Christian Gesse
+     */
     private class RemoteStatus {
         /**
-         * The constant DISCONNECT_NONE.
+         * Indicates that no disconnecting handler is active
          */
         public static final int DISCONNECT_NONE = 0;
         /**
-         * The constant DISCONNECT_ACCEPT.
+         * Indicates that the disconnect request was acceptet by the remote node
          */
         public static final int DISCONNECT_ACCEPT = 1;
         /**
-         * The constant DISCONNECT_REQ.
+         * Indicates that anoter disconnect handler is active
          */
         public static final int DISCONNECT_REQ = 2;
 
         /**
-         * The Lock.
+         * The lock used for synchronization and signaling
          */
         public final ReentrantLock lock = new ReentrantLock();
 
         /**
-         * The Connect.
+         * A condition object on connect state
          */
         public final Condition connect = lock.newCondition();
         /**
-         * The Disconnect.
+         * A condition object on disconect state
          */
         public final Condition disconnect = lock.newCondition();
         /**
-         * The Buffer.
+         * A condition object on state of RDMA buffer
          */
         public final Condition buffer = lock.newCondition();
 
         /**
-         * The Disconnect ack.
+         * Indicates if disconnect request was accepted
          */
         public final AtomicInteger disconnectAck = new AtomicInteger(DISCONNECT_NONE);
         /**
-         * The Connect ack.
+         * Indicates if connection request was accepted
          */
         public final AtomicBoolean connectAck = new AtomicBoolean(false);
         /**
-         * The Buffer ack.
+         * Indicates if RDMA buffer information was received by remote node
          */
         public final AtomicBoolean bufferAck = new AtomicBoolean(false);
 
         /**
-         * Wait for response.
+         * Wait for response on a certain condition
          *
-         * @param condition the condition
-         * @param timeoutMs the timeout ms
+         * @param condition the condition to wait on
+         * @param timeoutMs the timeout in ms
          */
         public void waitForResponse(Condition condition, long timeoutMs) {
             lock.lock();
@@ -882,9 +1004,9 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         /**
-         * Signal all.
+         * Signal based on a certain condition
          *
-         * @param condition the condition
+         * @param condition the condition to signal on
          */
         public void signalAll(Condition condition) {
             lock.lock();
@@ -895,7 +1017,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         /**
-         * Reset connection.
+         * Reset connection state
          */
         public void resetConnection() {
             connectAck.set(false);
@@ -903,19 +1025,40 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
     }
 
+    /**
+     * A fast table that indicates if a remote connection handler is already registered.
+     * Checking an atomic array is fatser than looking for the handler in the dynamic remote handler table
+     *
+     * @author Christian Gesse
+     */
     private class RegisteredHandlerTable {
+        /**
+         * The standard time to wait during polling
+         */
         private static final long POLL_NANOS = 1000;
 
+        /**
+         * Indicates that the remote connection handler is not registered
+         */
         private static final int UNREGISTERED = 0;
+        /**
+         * Indicates that the remote connection handler is registered
+         */
         private static final int REGISTERED = 1;
 
+        /**
+         * The table with one entry for each possible local id
+         */
         private final AtomicIntegerArray table;
+        /**
+         * The size of the table
+         */
         private final int size;
 
         /**
          * Instantiates a new Registered handler table.
          *
-         * @param size the size
+         * @param size the size of the table
          */
         public RegisteredHandlerTable(int size) {
             table = new AtomicIntegerArray(size);
@@ -923,32 +1066,33 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         /**
-         * Sets registered.
+         * Registers a remote handler in this table
          *
-         * @param i the
+         * @param i the local id
          */
         public void setRegistered(int i) {
             table.set(i, REGISTERED);
         }
 
         /**
-         * Gets status.
+         * Gets status of a remote handler in this table
          *
-         * @param i the
-         * @return the status
+         * @param i the local id
+         * @return indicator if handler is registered or not
          */
         public int getStatus(int i) {
             return table.get(i);
         }
 
         /**
-         * Poll.
+         * Poll until a ceratin handler gets registered
          *
-         * @param i the
+         * @param i the local id of the remote handler
          */
         public void poll(int i) {
             var status = table.get(i);
 
+            // poll until registered
             while (status != REGISTERED) {
                 status = table.get(i);
 
@@ -957,21 +1101,23 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         /**
-         * Poll boolean.
+         * Poll until a ceratin handler gets registered or timeout is reached
          *
-         * @param i         the
-         * @param timeoutMs the timeout ms
-         * @return the boolean
+         * @param i         the local id of the remote node
+         * @param timeoutMs the timeout in ms
+         * @return the boolean indicating if the remote handler is registered
          */
         public boolean poll(int i, long timeoutMs) {
             var status = table.get(i);
 
+            // convert timeout to nanoseconds for more efficient polling
             var timeoutNs = TimeUnit.NANOSECONDS.convert(timeoutMs, TimeUnit.MILLISECONDS);
             var start = System.nanoTime();
 
             while (status != REGISTERED && System.nanoTime() - start < timeoutNs) {
                 status = table.get(i);
 
+                // park thread to reduce CPU load
                 LockSupport.parkNanos(POLL_NANOS);
             }
 
