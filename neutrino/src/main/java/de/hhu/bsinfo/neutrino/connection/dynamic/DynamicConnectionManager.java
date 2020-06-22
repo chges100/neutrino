@@ -328,7 +328,7 @@ public class DynamicConnectionManager {
                 // put start of latency measurement into statistics
                 statisticManager.startConnectLatencyStatistic(connection.getId(), startConnect);
 
-                // send new connection request to remote node - the furhter connection processed is handled asynchronously
+                // send new connection request to remote node - the further connection processed is handled asynchronously
                 var localQP = new RCInformation(connection);
                 dch.initConnectionRequest(localQP, remoteLocalId);
 

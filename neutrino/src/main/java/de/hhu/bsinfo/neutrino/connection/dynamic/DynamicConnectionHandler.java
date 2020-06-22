@@ -822,7 +822,7 @@ public final class DynamicConnectionHandler extends UnreliableDatagram {
         }
 
         /**
-         * Handle a conection request
+         * Handle a connection request
          */
         private void handleConnectionRequest() {
             boolean connectionAck = false;
