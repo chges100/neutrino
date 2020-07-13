@@ -12,4 +12,4 @@
 
 ## Introduction
 
-Simple InfiniBand verbs programming in Java
+Simple InfiniBand verbs programming in Java. This version includes an extension for dynamic connection management for reliable connections. It provides an easy-to-use interface for RDMA operations and automatic node detection.
